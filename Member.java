@@ -1,5 +1,4 @@
 import java.util.ArrayList;
-import java.util.Random;
 import java.util.Scanner;
 
 public class Member extends User {
@@ -57,9 +56,13 @@ public class Member extends User {
         int hari = scanner.nextInt();
         scanner.nextLine(); // consume newline
 
-        Random random = new Random();
-        int hargaPerHari = 5000 + random.nextInt(15001); // 5000-20000
-        int biayaTambahan = 2000 + random.nextInt(8001); // 2000-10000
+        int hargaPerHari;
+        if (jenis.equals("Fiksi")) {
+            hargaPerHari = 5000;
+        } else {
+            hargaPerHari = 10000;
+        }
+        int biayaTambahan = 3000;
         int total = (hargaPerHari * hari) + biayaTambahan;
 
         System.out.println("Detail Peminjaman:");
