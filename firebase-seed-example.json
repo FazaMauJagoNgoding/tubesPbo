@@ -1,0 +1,29 @@
+{
+  "books": {
+    "1": {
+      "id": 1,
+      "judul": "Clean Code",
+      "jenis": "Pemrograman",
+      "stock": 3
+    },
+    "2": {
+      "id": 2,
+      "judul": "Laskar Pelangi",
+      "jenis": "Novel",
+      "stock": 5
+    },
+    "3": {
+      "id": 3,
+      "judul": "Atomic Habits",
+      "jenis": "Pengembangan Diri",
+      "stock": 2
+    }
+  },
+  "users": {
+    "UID_ADMIN_DARI_FIREBASE_AUTH": {
+      "name": "Admin",
+      "email": "admin@example.com",
+      "role": "admin"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1047072995790",
+    "project_id": "tubes-pbo-d50e4",
+    "storage_bucket": "tubes-pbo-d50e4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1047072995790:android:ba7760c8b1fb4471ce139f",
+        "android_client_info": {
+          "package_name": "tubes.pbo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCe__H081_RPls06QgNWrO4Ad0L5hKFir0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,23 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "books": {
+      ".read": "auth != null",
+      "$bookId": {
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || (data.exists() && newData.child('id').val() === data.child('id').val() && newData.child('judul').val() === data.child('judul').val() && newData.child('jenis').val() === data.child('jenis').val() && (newData.child('stock').val() === data.child('stock').val() - 1 || newData.child('stock').val() === data.child('stock').val() + 1)))",
+        ".validate": "newData.hasChildren(['id', 'judul', 'jenis', 'stock']) && newData.child('id').isNumber() && newData.child('judul').isString() && newData.child('jenis').isString() && newData.child('stock').isNumber() && newData.child('stock').val() >= 0"
+      }
+    },
+    "loans": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "users": {
+      "$uid": {
+        ".read": "auth != null && ($uid === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        ".write": "auth != null && (($uid === auth.uid && !data.exists() && newData.child('role').val() === 'member') || root.child('users').child(auth.uid).child('role').val() === 'admin')"
+      }
+    }
+  }
+}
