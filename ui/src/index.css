@@ -41,3 +41,146 @@
     @apply bg-surface text-on-surface font-sans;
   }
 }
+
+/* Hide native number input spinners across browsers */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Ensure numeric inputs used in inline controls are centered and visually consistent */
+.inline-number-input {
+  text-align: center;
+  -webkit-appearance: none;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Smooth pop-in/out helper for small inline controls and popups */
+.smooth-pop {
+  /* match collapse timing so transform/opacity stay in sync */
+  transition: transform 260ms cubic-bezier(.22,.9,.26,1), opacity 200ms ease;
+  will-change: transform, opacity;
+}
+
+/* Smooth collapse to avoid blank gap when unmounting - animates max-height
+   Keep overflow visible so transform animations aren't clipped while content moves */
+.smooth-collapse {
+  overflow: visible;
+  transition: max-height 260ms cubic-bezier(.22,.9,.26,1);
+  will-change: max-height;
+}
+.collapse-open {
+  max-height: 1200px; /* large enough for form */
+}
+.collapse-closed {
+  max-height: 0;
+}
+
+/* Scale-based collapse that compresses content toward the top (better visual fill) */
+.collapse-scale {
+  transform-origin: top;
+  transition: transform 260ms cubic-bezier(.2,.9,.2,1), opacity 180ms ease, max-height 260ms cubic-bezier(.2,.9,.2,1);
+  will-change: transform, opacity, max-height;
+}
+.scale-open { transform: scaleY(1); opacity: 1; max-height: 1200px; }
+.scale-closed { transform: scaleY(0); opacity: 0; max-height: 0; }
+
+
+/* Small control button used for +/- and confirm compact buttons */
+.control-btn {
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.6rem;
+  border: 1px solid var(--color-outline-variant);
+  background: transparent; /* remove gray background */
+  box-shadow: none;
+  transition: transform 160ms cubic-bezier(.2,.9,.2,1), box-shadow 160ms ease, background 160ms ease, color 160ms ease;
+  font-weight: 700;
+}
+.control-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 12px rgba(16,24,40,0.04); }
+.control-btn:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 4px 8px rgba(16,24,40,0.03);
+}
+.control-btn-primary {
+  background: var(--color-primary);
+  color: white;
+  border-color: transparent;
+  padding: 0 0.6rem;
+  height: 2rem;
+  border-radius: 0.6rem;
+}
+/* Inline adjust control (minus / number / plus) */
+.adjust-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.3rem;
+  border-radius: 0.5rem;
+  background: transparent; /* removed gray container */
+  border: 0; /* rely on per-button borders */
+  box-shadow: none;
+  transition: transform 180ms cubic-bezier(.22,.9,.26,1), opacity 160ms ease;
+  will-change: transform, opacity;
+}
+.adjust-inline.open { transform: translateY(0); opacity: 1; }
+.adjust-inline.closed { transform: translateY(-4px) scale(0.99); opacity: 0; }
+.inline-number-input {
+  width: auto;
+  min-width: 2ch;
+  max-width: 6ch;
+  height: 1.5rem;
+  padding: 0 0.15rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--color-outline-variant);
+  background: transparent;
+  box-shadow: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  text-align: center;
+  font-size: 0.95rem;
+  line-height: 1.5rem;
+  box-sizing: border-box;
+}
+.inline-number-input:focus { outline: none; border-color: rgba(0,32,70,0.12); box-shadow: 0 6px 14px rgba(0,32,70,0.04); }
+/* Confirm / cancel buttons beside adjust control */
+.adjust-confirm {
+  background: var(--color-primary);
+  color: white;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.45rem;
+  border: 0;
+  font-weight: 700;
+  box-shadow: 0 6px 14px rgba(2,6,23,0.06);
+  transition: transform 160ms cubic-bezier(.2,.9,.2,1), box-shadow 160ms ease, opacity 140ms ease;
+}
+.adjust-confirm:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(2,6,23,0.06); }
+.adjust-cancel {
+  background: transparent;
+  color: var(--color-on-surface-variant);
+  border: 1px solid var(--color-outline-variant);
+  padding: 0.3rem 0.55rem;
+  border-radius: 0.45rem;
+  transition: transform 120ms ease, background 120ms ease, color 120ms ease;
+}
+.adjust-cancel:hover { background: rgba(16,24,40,0.02); transform: translateY(-1px); }
+
+/* small keyframe for subtle pop used elsewhere */
+@keyframes subtle-pop {
+  0% { transform: translateY(6px) scale(0.98); opacity: 0; }
+  60% { transform: translateY(-3px) scale(1.02); opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+.pop-in { animation: subtle-pop 260ms cubic-bezier(.22,.9,.26,1) both; }
+/* specific styling for +/- buttons inside adjust control */
+.adjust-inline .control-btn { border: 1px solid var(--color-outline-variant); background: transparent; color: var(--color-on-surface); padding: 0; width: 2.25rem; height: 2rem; border-radius: 0.5rem; display: inline-flex; align-items: center; justify-content: center; }
+.adjust-inline .control-btn.btn-plus:hover { color: var(--color-secondary); border-color: var(--color-secondary); }
+.adjust-inline .control-btn.btn-minus:hover { color: var(--color-error); border-color: var(--color-error); }

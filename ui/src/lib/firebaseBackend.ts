@@ -218,6 +218,57 @@ export async function getBooks(session = getSession()): Promise<BookRecord[]> {
   return books;
 }
 
+export type NotificationRecord = {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string; // ISO
+  toRole?: UserRole | 'all';
+  toUserId?: string;
+  read?: boolean;
+};
+
+export async function pushNotification(notification: Omit<NotificationRecord, 'id' | 'createdAt'>, session = getSession()) {
+  if (!session) {
+    throw new Error('Silakan login terlebih dahulu.');
+  }
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const full: NotificationRecord = { id, createdAt: new Date().toISOString(), read: false, ...notification } as NotificationRecord;
+  await requestJson(dbUrl(`notifications/${id}`, session.idToken), {
+    method: 'PUT',
+    body: JSON.stringify(full),
+  });
+}
+
+export async function getNotifications(session = getSession()): Promise<NotificationRecord[]> {
+  if (!session) {
+    return [];
+  }
+  const records = await requestJson<Record<string, Omit<NotificationRecord, 'id'> | null> | null>(dbUrl('notifications', session.idToken));
+  if (!records) return [];
+  const notifications = Object.entries(records)
+    .filter((entry): entry is [string, Omit<NotificationRecord, 'id'>] => entry[1] !== null)
+    .map(([id, value]) => ({ id, ...value } as NotificationRecord))
+    .filter((n) => {
+      if (n.toRole === 'all') return true;
+      if (n.toRole && n.toRole === session.role) return true;
+      if (n.toUserId && n.toUserId === session.uid) return true;
+      return false;
+    })
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return notifications;
+}
+
+export async function markNotificationRead(notificationId: string, session = getSession()): Promise<void> {
+  if (!session) throw new Error('Silakan login terlebih dahulu.');
+  const existing = await requestJson<NotificationRecord | null>(dbUrl(`notifications/${notificationId}`, session.idToken));
+  if (!existing) return;
+  await requestJson(dbUrl(`notifications/${notificationId}`, session.idToken), {
+    method: 'PUT',
+    body: JSON.stringify({ ...existing, read: true }),
+  });
+}
+
 export async function saveBook(book: BookRecord, session = getSession()) {
   if (!session) {
     throw new Error('Silakan login terlebih dahulu.');
@@ -232,6 +283,13 @@ export async function saveBook(book: BookRecord, session = getSession()) {
     BOOKS_CACHE_KEY,
     [...cachedBooks.filter((cachedBook) => cachedBook.id !== book.id), book].sort((a, b) => a.id - b.id)
   );
+
+  // Notify all members about new book
+  try {
+    await pushNotification({ title: `Buku baru: ${book.judul}`, body: `Buku "${book.judul}" telah ditambahkan ke katalog.`, toRole: 'member' }, session);
+  } catch {
+    // ignore notification failures
+  }
 }
 
 export async function deleteBook(bookId: number, session = getSession()) {
@@ -301,6 +359,25 @@ export async function borrowBook(book: BookRecord, days = 7, session = getSessio
     LOANS_CACHE_KEY,
     [loanRecord, ...getCachedLoans().filter((cachedLoan) => cachedLoan.id !== loanId)]
   );
+
+  // Notify admin that someone borrowed a book
+  try {
+    await pushNotification({ title: `Peminjaman: ${book.judul}`, body: `${session.name} meminjam buku "${book.judul}" (ID ${book.id}).`, toRole: 'admin' }, session);
+  } catch {
+    // ignore
+  }
+
+  // Simple popularity heuristic: count loans for this book and notify members if many
+  try {
+    const records = await requestJson<Record<string, Omit<LoanRecord, 'id'> | null> | null>(dbUrl('loans', session.idToken));
+    const count = records ? Object.values(records).filter((v) => v !== null && (v as any).bookId === book.id).length : 0;
+    if (count >= 3) {
+      await pushNotification({ title: `Buku populer: ${book.judul}`, body: `Buku "${book.judul}" sedang sering dipinjam. Cek ketersediaan cepat!`, toRole: 'member' }, session);
+    }
+  } catch {
+    // ignore
+  }
+
   return loanRecord;
 }
 

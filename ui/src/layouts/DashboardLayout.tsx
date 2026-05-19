@@ -15,10 +15,10 @@ import {
   Menu,
   X
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/src/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
-import { clearSession, getSession } from '@/src/lib/firebaseBackend';
+import { clearSession, getSession, getNotifications, markNotificationRead, NotificationRecord } from '@/src/lib/firebaseBackend';
 
 const sidebarItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', roles: ['admin', 'member'] },
@@ -47,6 +47,27 @@ export default function DashboardLayout() {
     role: 'Member',
     avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=100'
   };
+
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+
+  const loadNotifications = async () => {
+    try {
+      const list = await getNotifications();
+      setNotifications(list);
+    } catch {
+      // ignore
+    }
+  };
+
+  // poll notifications every 10s
+  useEffect(() => {
+    loadNotifications();
+    const id = setInterval(loadNotifications, 10000);
+    return () => clearInterval(id);
+  }, []);
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
     <div className="min-h-screen bg-surface flex overflow-hidden">
@@ -167,10 +188,48 @@ export default function DashboardLayout() {
           </div>
 
           <div className="flex items-center gap-2 md:gap-4">
-            <button className="p-2 rounded-full hover:bg-surface-container transition-colors relative">
-              <Bell className="w-5 h-5 text-on-surface-variant" />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-error rounded-full border-2 border-white" />
-            </button>
+            <div className="relative">
+              <button onClick={() => setIsNotifOpen((s) => !s)} className="p-2 rounded-full hover:bg-surface-container transition-colors relative">
+                <Bell className="w-5 h-5 text-on-surface-variant" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-4 bg-error rounded-full text-[10px] text-white flex items-center justify-center px-1 font-bold border-2 border-white">{unreadCount}</span>
+                )}
+              </button>
+
+              <AnimatePresence>
+                {isNotifOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+                    className="absolute right-0 mt-2 w-80 z-50 rounded-xl bg-white border border-outline-variant shadow-2xl overflow-hidden"
+                  >
+                    <div className="p-3 border-b border-outline-variant/30 flex items-center justify-between">
+                      <h3 className="text-sm font-bold">Notifikasi</h3>
+                      <button onClick={() => { setNotifications((n) => n.map(item => ({ ...item, read: true }))); Promise.all(notifications.filter(n => !n.read).map(n => markNotificationRead(n.id))).catch(()=>{}); }} className="text-xs text-on-surface-variant">Tandai semua</button>
+                    </div>
+                    <div className="max-h-64 overflow-auto">
+                      {notifications.length === 0 && <div className="p-4 text-sm text-on-surface-variant">Tidak ada notifikasi.</div>}
+                      {notifications.map((n) => (
+                        <div key={n.id} className={cn('p-3 border-b border-outline-variant/20 flex items-start gap-3', !n.read ? 'bg-surface-container-low' : '')}>
+                          <div className="flex-1">
+                            <div className="text-sm font-bold">{n.title}</div>
+                            <div className="text-xs text-on-surface-variant mt-1">{n.body}</div>
+                            <div className="text-[10px] text-on-surface-variant mt-2">{new Date(n.createdAt).toLocaleString()}</div>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            {!n.read && (
+                              <button onClick={() => { markNotificationRead(n.id).then(()=>loadNotifications()); }} className="text-xs px-2 py-1 rounded bg-primary/10 text-primary">Tandai</button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
             <button className="p-2 rounded-full hover:bg-surface-container transition-colors">
               <Settings className="w-5 h-5 text-on-surface-variant" />
             </button>
