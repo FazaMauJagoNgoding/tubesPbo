@@ -1,5 +1,6 @@
 import { 
   Plus, 
+  Search,
   Filter, 
   ArrowUpDown, 
   ChevronLeft, 
@@ -404,53 +405,68 @@ export default function ManageBooksSubView() {
       <div className="bg-white rounded-2xl shadow-sm border border-outline-variant/30 overflow-hidden">
         <div className="p-5 border-b border-outline-variant/30 flex flex-col sm:flex-row items-center justify-between gap-4 bg-surface-container-low/30">
           <div className="w-full sm:w-auto relative hidden sm:block">
-            {/* Search handles by topbar usually, but here for table specific */}
+            <div className="relative max-w-2xl">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-on-surface-variant" />
+              <input
+                type="text"
+                value={filterQuery}
+                onChange={(e) => setFilterQuery(e.target.value)}
+                placeholder="Cari judul..."
+                className="w-full bg-white border border-outline-variant pl-12 pr-4 py-3.5 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary transition-all shadow-sm"
+              />
+            </div>
           </div>
           <div className="flex gap-3 w-full sm:w-auto relative">
             <div className="relative">
-              <button onClick={() => setFilterOpen(prev => !prev)} className="flex items-center gap-2 px-4 py-2 border border-outline-variant rounded-xl text-xs font-bold text-on-surface-variant hover:bg-surface-container transition-all">
+              <button onClick={() => setFilterOpen(prev => { const next = !prev; if (next) setSortOpen(false); return next; })} className="flex items-center gap-2 px-4 py-2 border border-outline-variant rounded-xl text-xs font-bold text-on-surface-variant hover:bg-surface-container transition-all">
                 <Filter className="w-4 h-4" /> Filter
               </button>
-              {filterOpen && (
-                <div className="mt-2 w-72 bg-white p-4 rounded-xl shadow-md z-50">
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold">Cari judul</label>
-                    <input value={filterQuery} onChange={(e) => setFilterQuery(e.target.value)} className="w-full px-3 py-2 border border-outline-variant rounded-md text-sm" placeholder="Cari judul..." />
-                    <div className="pt-2">
-                      <label className="text-xs font-semibold">Jenis</label>
-                      <select value={filterJenis} onChange={(e) => setFilterJenis(e.target.value)} className="w-full px-2 py-2 border border-outline-variant rounded-md text-sm">
-                        <option value="">Semua jenis</option>
-                        {jenisOptions.map(j => <option key={j} value={j}>{j}</option>)}
-                      </select>
-                    </div>
-                    <div className="flex justify-end gap-2 pt-2">
-                      <button onClick={() => { setFilterQuery(''); setFilterJenis(''); }} className="px-3 py-1 text-sm border rounded">Reset</button>
-                      <button onClick={() => setFilterOpen(false)} className="px-3 py-1 text-sm bg-primary text-white rounded">Terapkan</button>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
             <div className="relative">
-              <button onClick={() => setSortOpen(prev => !prev)} className="flex items-center gap-2 px-4 py-2 border border-outline-variant rounded-xl text-xs font-bold text-on-surface-variant hover:bg-surface-container transition-all">
+              <button onClick={() => setSortOpen(prev => { const next = !prev; if (next) setFilterOpen(false); return next; })} className="flex items-center gap-2 px-4 py-2 border border-outline-variant rounded-xl text-xs font-bold text-on-surface-variant hover:bg-surface-container transition-all">
                 <ArrowUpDown className="w-4 h-4" /> Urutkan
               </button>
-              {sortOpen && (
-                <div className="mt-2 w-48 bg-white p-4 rounded-xl shadow-md z-50">
-                  <label className="text-xs font-semibold">Urutkan</label>
-                  <select value={sortOption} onChange={(e) => setSortOption(e.target.value as any)} className="w-full px-2 py-2 border border-outline-variant rounded-md text-sm">
-                    <option value="title-asc">Judul A-Z</option>
-                    <option value="title-desc">Judul Z-A</option>
-                    <option value="stock-asc">Stock ↑</option>
-                    <option value="stock-desc">Stock ↓</option>
-                  </select>
-                  <div className="flex justify-end gap-2 pt-2">
-                    <button onClick={() => { setSortOption('title-asc'); }} className="px-3 py-1 text-sm border rounded">Reset</button>
-                    <button onClick={() => setSortOpen(false)} className="px-3 py-1 text-sm bg-primary text-white rounded">Terapkan</button>
-                  </div>
-                </div>
-              )}
             </div>
+
+            {(filterOpen || sortOpen) && (
+              <div style={{ top: 'calc(100% + 8px)', transitionTimingFunction: 'cubic-bezier(0.2,0.9,0.2,1)', willChange: 'transform, opacity' }} className={cn("absolute left-0 right-0 flex justify-center gap-6 transform transition-all duration-360 z-50", (filterOpen || sortOpen) ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-3 pointer-events-none')}>
+                {filterOpen && (
+                  <div style={{ transitionTimingFunction: 'cubic-bezier(0.2,0.9,0.2,1)', willChange: 'transform, opacity' }} className={cn('w-72 bg-white p-4 rounded-xl shadow-md transform transition-[transform,opacity] duration-360', filterOpen ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-2 scale-95')}>
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold">Cari judul</label>
+                      <input value={filterQuery} onChange={(e) => setFilterQuery(e.target.value)} className="w-full px-3 py-2 border border-outline-variant rounded-md text-sm" placeholder="Cari judul..." />
+                      <div className="pt-2">
+                        <label className="text-xs font-semibold">Jenis</label>
+                        <select value={filterJenis} onChange={(e) => setFilterJenis(e.target.value)} className="w-full px-2 py-2 border border-outline-variant rounded-md text-sm">
+                          <option value="">Semua jenis</option>
+                          {jenisOptions.map(j => <option key={j} value={j}>{j}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex justify-end gap-2 pt-2">
+                        <button onClick={() => { setFilterQuery(''); setFilterJenis(''); }} className="px-3 py-1 text-sm border rounded">Reset</button>
+                        <button onClick={() => setFilterOpen(false)} className="px-3 py-1 text-sm bg-primary text-white rounded">Terapkan</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {sortOpen && (
+                  <div style={{ transitionTimingFunction: 'cubic-bezier(0.2,0.9,0.2,1)', willChange: 'transform, opacity' }} className={cn('w-48 bg-white p-4 rounded-xl shadow-md transform transition-[transform,opacity] duration-360', sortOpen ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-2 scale-95')}>
+                    <label className="text-xs font-semibold">Urutkan</label>
+                    <select value={sortOption} onChange={(e) => setSortOption(e.target.value as any)} className="w-full px-2 py-2 border border-outline-variant rounded-md text-sm">
+                      <option value="title-asc">Judul A-Z</option>
+                      <option value="title-desc">Judul Z-A</option>
+                      <option value="stock-asc">Stock ↑</option>
+                      <option value="stock-desc">Stock ↓</option>
+                    </select>
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button onClick={() => { setSortOption('title-asc'); }} className="px-3 py-1 text-sm border rounded">Reset</button>
+                      <button onClick={() => setSortOpen(false)} className="px-3 py-1 text-sm bg-primary text-white rounded">Terapkan</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
