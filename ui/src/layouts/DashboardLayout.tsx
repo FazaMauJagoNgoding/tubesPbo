@@ -68,6 +68,26 @@ export default function DashboardLayout() {
   }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+  const markAllNotificationsRead = () => {
+    const unreadNotifications = notifications.filter((n) => !n.read);
+
+    if (unreadNotifications.length === 0) {
+      return;
+    }
+
+    setNotifications((current) => current.map((item) => ({ ...item, read: true })));
+    Promise.all(unreadNotifications.map((n) => markNotificationRead(n.id))).catch(() => {});
+  };
+
+  const handleNotificationToggle = () => {
+    setIsNotifOpen((isOpen) => {
+      if (!isOpen) {
+        markAllNotificationsRead();
+      }
+
+      return !isOpen;
+    });
+  };
 
   return (
     <div className="min-h-screen bg-surface flex overflow-hidden">
@@ -189,7 +209,7 @@ export default function DashboardLayout() {
 
           <div className="flex items-center gap-2 md:gap-4">
             <div className="relative">
-              <button onClick={() => setIsNotifOpen((s) => !s)} className="p-2 rounded-full hover:bg-surface-container transition-colors relative">
+              <button onClick={handleNotificationToggle} className="p-2 rounded-full hover:bg-surface-container transition-colors relative">
                 <Bell className="w-5 h-5 text-on-surface-variant" />
                 {unreadCount > 0 && (
                   <span className="absolute -top-1 -right-1 min-w-[18px] h-4 bg-error rounded-full text-[10px] text-white flex items-center justify-center px-1 font-bold border-2 border-white">{unreadCount}</span>
@@ -207,7 +227,7 @@ export default function DashboardLayout() {
                   >
                     <div className="p-3 border-b border-outline-variant/30 flex items-center justify-between">
                       <h3 className="text-sm font-bold">Notifikasi</h3>
-                      <button onClick={() => { setNotifications((n) => n.map(item => ({ ...item, read: true }))); Promise.all(notifications.filter(n => !n.read).map(n => markNotificationRead(n.id))).catch(()=>{}); }} className="text-xs text-on-surface-variant">Tandai semua</button>
+                      <button onClick={markAllNotificationsRead} className="text-xs text-on-surface-variant">Tandai semua</button>
                     </div>
                     <div className="max-h-64 overflow-auto">
                       {notifications.length === 0 && <div className="p-4 text-sm text-on-surface-variant">Tidak ada notifikasi.</div>}

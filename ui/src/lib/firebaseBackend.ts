@@ -16,6 +16,11 @@ export type BookRecord = {
   coverUrl?: string;
 };
 
+type SaveBookOptions = {
+  notifyNewBook?: boolean;
+  notifyRestock?: boolean;
+};
+
 export type LoanRecord = {
   id: string;
   memberUid: string;
@@ -269,10 +274,13 @@ export async function markNotificationRead(notificationId: string, session = get
   });
 }
 
-export async function saveBook(book: BookRecord, session = getSession()) {
+export async function saveBook(book: BookRecord, session = getSession(), options: SaveBookOptions = {}) {
   if (!session) {
     throw new Error('Silakan login terlebih dahulu.');
   }
+
+  const { notifyNewBook = true, notifyRestock = true } = options;
+  const existingBook = await requestJson<BookRecord | null>(dbUrl(`books/${book.id}`, session.idToken));
 
   await requestJson(dbUrl(`books/${book.id}`, session.idToken), {
     method: 'PUT',
@@ -284,11 +292,24 @@ export async function saveBook(book: BookRecord, session = getSession()) {
     [...cachedBooks.filter((cachedBook) => cachedBook.id !== book.id), book].sort((a, b) => a.id - b.id)
   );
 
-  // Notify all members about new book
-  try {
-    await pushNotification({ title: `Buku baru: ${book.judul}`, body: `Buku "${book.judul}" telah ditambahkan ke katalog.`, toRole: 'member' }, session);
-  } catch {
-    // ignore notification failures
+  if (!existingBook && notifyNewBook) {
+    try {
+      await pushNotification({ title: `Buku baru: ${book.judul}`, body: `Buku "${book.judul}" telah ditambahkan ke katalog.`, toRole: 'member' }, session);
+    } catch {
+      // ignore notification failures
+    }
+  }
+
+  if (existingBook && notifyRestock && session.role === 'admin' && book.stock > existingBook.stock) {
+    try {
+      await pushNotification({
+        title: `Restock: ${book.judul}`,
+        body: `Buku "${book.judul}" telah di-restock. Stok tersedia sekarang ${book.stock}.`,
+        toRole: 'member',
+      }, session);
+    } catch {
+      // ignore notification failures
+    }
   }
 }
 
@@ -348,7 +369,7 @@ export async function borrowBook(book: BookRecord, days = 7, session = getSessio
     returned: false,
   };
 
-  await saveBook(updatedBook, session);
+  await saveBook(updatedBook, session, { notifyNewBook: false, notifyRestock: false });
   const loanId = String(book.id);
   await requestJson(dbUrl(`loans/${loanId}`, session.idToken), {
     method: 'PUT',
@@ -359,24 +380,6 @@ export async function borrowBook(book: BookRecord, days = 7, session = getSessio
     LOANS_CACHE_KEY,
     [loanRecord, ...getCachedLoans().filter((cachedLoan) => cachedLoan.id !== loanId)]
   );
-
-  // Notify admin that someone borrowed a book
-  try {
-    await pushNotification({ title: `Peminjaman: ${book.judul}`, body: `${session.name} meminjam buku "${book.judul}" (ID ${book.id}).`, toRole: 'admin' }, session);
-  } catch {
-    // ignore
-  }
-
-  // Simple popularity heuristic: count loans for this book and notify members if many
-  try {
-    const records = await requestJson<Record<string, Omit<LoanRecord, 'id'> | null> | null>(dbUrl('loans', session.idToken));
-    const count = records ? Object.values(records).filter((v) => v !== null && (v as any).bookId === book.id).length : 0;
-    if (count >= 3) {
-      await pushNotification({ title: `Buku populer: ${book.judul}`, body: `Buku "${book.judul}" sedang sering dipinjam. Cek ketersediaan cepat!`, toRole: 'member' }, session);
-    }
-  } catch {
-    // ignore
-  }
 
   return loanRecord;
 }
@@ -401,7 +404,7 @@ export async function confirmBookReturn(loan: LoanRecord, session = getSession()
   const books = await getBooks(session);
   const borrowedBook = books.find((book) => book.id === loan.bookId);
   if (borrowedBook) {
-    await saveBook({ ...borrowedBook, stock: borrowedBook.stock + 1 }, session);
+    await saveBook({ ...borrowedBook, stock: borrowedBook.stock + 1 }, session, { notifyRestock: false });
   }
 
   writeCache(
