@@ -6,11 +6,12 @@ import {
   ArrowRight,
   BookOpen,
   User,
-  Clock
+  Clock,
+  X
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '@/src/lib/utils';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { getCachedLoans, getLoans, getSession, LoanRecord } from '@/src/lib/firebaseBackend';
 
 function getVisibleLoans(loans: LoanRecord[], session: ReturnType<typeof getSession>) {
@@ -19,15 +20,56 @@ function getVisibleLoans(loans: LoanRecord[], session: ReturnType<typeof getSess
     : loans.filter((loan) => loan.memberUid === session?.uid);
 }
 
+function parseIndonesianDate(dateValue: string) {
+  if (!dateValue) return null;
+  const [day, month, year] = dateValue.split('/').map(Number);
+  if (!day || !month || !year) {
+    return null;
+  }
+  return new Date(year, month - 1, day);
+}
+
 export default function LoanHistorySubView() {
   const session = getSession();
   const [historyData, setHistoryData] = useState<LoanRecord[]>(() => getVisibleLoans(getCachedLoans(), session));
+  const [searchQuery, setSearchQuery] = useState('');
+  const [startDate, setStartDate] = useState('');
 
   useEffect(() => {
     getLoans()
       .then((loans) => setHistoryData(getVisibleLoans(loans, session)))
       .catch((error) => console.error(error));
   }, [session?.role, session?.uid]);
+
+  const filteredData = useMemo(() => {
+    return historyData.filter((item) => {
+      // Filter by search query
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchName = item.memberName.toLowerCase().includes(query);
+        const matchId = `ln-${item.id}`.includes(query);
+        const matchNim = item.memberUid.toLowerCase().includes(query);
+        if (!matchName && !matchId && !matchNim) return false;
+      }
+
+      // Filter by date
+      if (startDate) {
+        const itemDate = parseIndonesianDate(item.borrowDate);
+        if (!itemDate) return true;
+        
+        const start = new Date(startDate);
+        if (
+          itemDate.getFullYear() !== start.getFullYear() ||
+          itemDate.getMonth() !== start.getMonth() ||
+          itemDate.getDate() !== start.getDate()
+        ) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [historyData, searchQuery, startDate]);
 
   return (
     <div className="space-y-10">
@@ -48,14 +90,31 @@ export default function LoanHistorySubView() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
             <input 
               type="text" 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Cari berdasarkan NIM atau ID..." 
               className="w-full bg-white pl-10 pr-4 py-2 text-sm border border-outline-variant rounded-lg focus:ring-2 focus:ring-primary/10 transition-all outline-none"
             />
           </div>
-          <div className="flex items-center gap-3">
-             <button className="flex items-center gap-2 px-4 py-2 bg-white border border-outline-variant rounded-lg text-xs font-bold text-on-surface-variant hover:bg-surface-container transition-all">
-              <Calendar className="w-4 h-4" /> Pilih Periode
-            </button>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 bg-white border border-outline-variant rounded-lg px-3 py-1.5 focus-within:ring-2 focus-within:ring-primary/10 transition-all">
+              <span className="text-xs font-bold text-on-surface-variant">Tanggal Pinjam:</span>
+              <input 
+                type="date" 
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="text-xs bg-transparent outline-none text-on-surface font-medium"
+              />
+            </div>
+            {startDate && (
+              <button 
+                onClick={() => setStartDate('')}
+                className="p-1.5 hover:bg-surface-container rounded-md transition-colors text-on-surface-variant"
+                aria-label="Clear dates"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -71,7 +130,7 @@ export default function LoanHistorySubView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/20">
-              {historyData.map((item) => {
+              {filteredData.map((item) => {
                 const isLate = Number(item.fine || 0) > 0;
 
                 return (
