@@ -46,6 +46,8 @@ export default function ManageBooksSubView() {
   const [filterQuery, setFilterQuery] = useState('');
   const [filterJenis, setFilterJenis] = useState('');
   const [sortOption, setSortOption] = useState<'title-asc'|'title-desc'|'stock-asc'|'stock-desc'>('title-asc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 8;
 
   const jenisOptions = useMemo(() => Array.from(new Set(books.map(b => b.jenis))).filter(Boolean), [books]);
 
@@ -68,6 +70,16 @@ export default function ManageBooksSubView() {
   }, [books, filterQuery, filterJenis, sortOption]);
 
   const nextBookId = useMemo(() => Math.max(0, ...books.map((book) => book.id)) + 1, [books]);
+  const totalPages = Math.max(1, Math.ceil(displayedBooks.length / pageSize));
+  const paginatedBooks = displayedBooks.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterQuery, filterJenis, sortOption]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const loadBooks = async () => {
     try {
@@ -482,7 +494,7 @@ export default function ManageBooksSubView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/20">
-              {displayedBooks.map((book) => (
+              {paginatedBooks.map((book) => (
                 <tr key={book.id} className="hover:bg-surface-container-low/30 transition-colors group">
                   <td className="py-6 px-6 text-sm font-mono font-bold text-on-surface-variant">BK-{String(book.id).padStart(4, '0')}</td>
                   <td className="py-6 px-6">
@@ -565,20 +577,46 @@ export default function ManageBooksSubView() {
                   </td>
                 </tr>
               ))}
+              {paginatedBooks.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-sm font-semibold text-on-surface-variant">
+                    Tidak ada buku yang cocok dengan filter.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
 
         <div className="px-6 py-5 border-t border-outline-variant/30 bg-surface-container-low/30 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <span className="text-sm font-semibold text-on-surface-variant">Menampilkan {displayedBooks.length} dari {books.length} buku dari Firebase</span>
+          <span className="text-sm font-semibold text-on-surface-variant">Menampilkan {paginatedBooks.length} dari {displayedBooks.length} buku dari Firebase</span>
           <div className="flex items-center gap-2">
-            <button className="w-9 h-9 flex items-center justify-center rounded-xl border border-outline-variant text-on-surface-variant hover:bg-white hover:text-primary transition-all disabled:opacity-30" disabled>
+            <button
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              className="w-9 h-9 flex items-center justify-center rounded-xl border border-outline-variant text-on-surface-variant hover:bg-white hover:text-primary transition-all disabled:opacity-30"
+              disabled={currentPage === 1}
+            >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <button className="w-9 h-9 flex items-center justify-center rounded-xl bg-primary text-white text-sm font-bold shadow-md">1</button>
-            <button className="w-9 h-9 flex items-center justify-center rounded-xl border border-outline-variant text-on-surface hover:bg-white hover:text-primary transition-all text-sm font-bold">2</button>
-            <button className="w-9 h-9 flex items-center justify-center rounded-xl border border-outline-variant text-on-surface hover:bg-white hover:text-primary transition-all text-sm font-bold">3</button>
-            <button className="w-9 h-9 flex items-center justify-center rounded-xl border border-outline-variant text-on-surface-variant hover:bg-white hover:text-primary transition-all">
+            {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+              <button
+                key={page}
+                onClick={() => setCurrentPage(page)}
+                className={cn(
+                  "w-9 h-9 flex items-center justify-center rounded-xl text-sm font-bold transition-all",
+                  page === currentPage
+                    ? "bg-primary text-white shadow-md"
+                    : "border border-outline-variant text-on-surface hover:bg-white hover:text-primary"
+                )}
+              >
+                {page}
+              </button>
+            ))}
+            <button
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              className="w-9 h-9 flex items-center justify-center rounded-xl border border-outline-variant text-on-surface-variant hover:bg-white hover:text-primary transition-all disabled:opacity-30"
+              disabled={currentPage === totalPages}
+            >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>

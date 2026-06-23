@@ -349,6 +349,11 @@ export default function CatalogSubView() {
         "grid gap-6",
         viewMode === 'grid' ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" : "grid-cols-1"
       )}>
+        {filteredBooks.length === 0 && (
+          <div className="col-span-full rounded-2xl border border-outline-variant/30 bg-white p-8 text-center text-sm font-semibold text-on-surface-variant">
+            Tidak ada buku yang cocok dengan pencarian atau filter.
+          </div>
+        )}
         {filteredBooks.map((book, i) => (
           <motion.div 
             key={book.id}

@@ -71,6 +71,28 @@ export default function LoanHistorySubView() {
     });
   }, [historyData, searchQuery, startDate]);
 
+  const exportHistoryCsv = () => {
+    const rows = [
+      ['ID', 'Peminjam', 'Email', 'Buku', 'Tanggal Pinjam', 'Tanggal Kembali/Jatuh Tempo', 'Status'],
+      ...filteredData.map((loan) => [
+        `LN-${loan.id}`,
+        loan.memberName,
+        loan.memberEmail || loan.memberUid,
+        loan.bookTitle,
+        loan.borrowDate,
+        loan.returnDate || loan.dueDate,
+        Number(loan.fine || 0) > 0 ? 'Terlambat' : loan.returned ? 'Selesai' : 'Aktif',
+      ]),
+    ];
+    const csv = rows.map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'riwayat-peminjaman.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-10">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
@@ -78,7 +100,7 @@ export default function LoanHistorySubView() {
           <h1 className="text-3xl font-bold text-on-surface tracking-tight">Riwayat Peminjaman</h1>
           <p className="text-sm text-on-surface-variant mt-1">Daftar lengkap rekam jejak peminjaman buku yang telah selesai.</p>
         </div>
-        <button className="flex items-center justify-center gap-2 bg-white border border-outline-variant px-5 py-3 rounded-xl font-bold text-sm text-on-surface hover:bg-surface-container transition-all">
+        <button onClick={exportHistoryCsv} className="flex items-center justify-center gap-2 bg-white border border-outline-variant px-5 py-3 rounded-xl font-bold text-sm text-on-surface hover:bg-surface-container transition-all">
           <Download className="w-5 h-5" />
           Ekspor Semua
         </button>
@@ -178,10 +200,17 @@ export default function LoanHistorySubView() {
                     </div>
                   </td>
                   <td className="py-6 px-6 text-right">
-                    <button className="text-xs font-bold text-primary hover:underline">Detail Nota</button>
+                    <button onClick={() => window.print()} className="text-xs font-bold text-primary hover:underline">Detail Nota</button>
                   </td>
                 </tr>
               )})}
+              {filteredData.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-sm font-semibold text-on-surface-variant">
+                    Tidak ada riwayat peminjaman yang cocok.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

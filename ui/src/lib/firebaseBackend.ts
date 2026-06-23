@@ -54,6 +54,9 @@ export type MemberProfile = {
   location: string;
   bio: string;
   photoUrl?: string;
+  photoProfile?: string;
+  completionProgress?: number;
+  profileCompletion?: boolean;
 };
 
 export type MemberProfileRecord = {
@@ -61,12 +64,17 @@ export type MemberProfileRecord = {
   email?: string;
   role?: UserRole;
   profileCompleted?: boolean;
+  profileCompletion?: boolean;
+  completionProgress?: number;
+  photoUrl?: string;
+  photoProfile?: string;
   profile?: MemberProfile;
 };
 
 const SESSION_KEY = 'campuslibSession';
 const BOOKS_CACHE_KEY = 'campuslibBooksCache';
 const LOANS_CACHE_KEY = 'campuslibLoansCache';
+const MEMBER_PROFILE_CACHE_PREFIX = 'campuslibMemberProfile:';
 const viteEnv = (import.meta as unknown as { env?: Record<string, string | undefined> }).env || {};
 const API_KEY = viteEnv.VITE_FIREBASE_API_KEY || 'AIzaSyCe__H081_RPls06QgNWrO4Ad0L5hKFir0';
 const DATABASE_URL = (viteEnv.VITE_FIREBASE_DATABASE_URL || 'https://tubes-pbo-d50e4-default-rtdb.asia-southeast1.firebasedatabase.app').replace(/\/+$/, '');
@@ -125,6 +133,17 @@ function authUrl(endpoint: 'signInWithPassword' | 'signUp') {
 function dbUrl(path: string, idToken: string) {
   const cleanPath = path.replace(/^\/+/, '');
   return `${DATABASE_URL}/${cleanPath}.json?auth=${encodeURIComponent(idToken)}`;
+}
+
+function dbQueryUrl(path: string, idToken: string, query: Record<string, string>) {
+  const baseUrl = dbUrl(path, idToken);
+  const params = new URLSearchParams();
+
+  Object.entries(query).forEach(([key, value]) => {
+    params.set(key, JSON.stringify(value));
+  });
+
+  return `${baseUrl}&${params.toString()}`;
 }
 
 function toArray<T extends object>(records: Record<string, T | null> | T[] | null | undefined, mapId?: (key: string, value: T) => T) {
@@ -191,7 +210,7 @@ export function isProfileCompleted(session = getSession()) {
     return false;
   }
 
-  return session.role === 'admin' || session.profileCompleted === true;
+  return session.role === 'admin' || session.profileCompleted === true || getProfileProgress(getCachedMemberProfile(session.uid)) === 100;
 }
 
 export function markProfileCompleted(profile?: MemberProfile) {
@@ -199,24 +218,25 @@ export function markProfileCompleted(profile?: MemberProfile) {
   if (!session) {
     return null;
   }
+  const profileWithMetadata = profile ? withProfileMetadata(profile) : undefined;
 
   const updatedSession = {
     ...session,
-    name: profile?.fullName || session.name,
-    photoUrl: profile?.photoUrl || session.photoUrl,
+    name: profileWithMetadata?.fullName || session.name,
+    photoUrl: getProfilePhoto(profileWithMetadata) || session.photoUrl,
     profileCompleted: true,
   };
   saveSession(updatedSession);
 
-  if (profile) {
-    writeCache(`campuslibMemberProfile:${session.uid}`, profile);
+  if (profileWithMetadata) {
+    writeCache(memberProfileCacheKey(session.uid), profileWithMetadata);
   }
 
   return updatedSession;
 }
 
 export function getCachedMemberProfile(memberUid: string): MemberProfile | null {
-  return readCache<MemberProfile | null>(`campuslibMemberProfile:${memberUid}`, null);
+  return readCache<MemberProfile | null>(memberProfileCacheKey(memberUid), null);
 }
 
 export function getCachedBooks(): BookRecord[] {
@@ -236,16 +256,27 @@ export async function login(email: string, password: string): Promise<AuthSessio
     method: 'POST',
     body: JSON.stringify({ email, password, returnSecureToken: true }),
   });
-  const user = await requestJson<{ name?: string; role?: UserRole; profileCompleted?: boolean; profile?: MemberProfile; photoUrl?: string } | null>(dbUrl(`users/${auth.localId}`, auth.idToken));
+  const user = await requestJson<MemberProfileRecord | null>(dbUrl(`users/${auth.localId}`, auth.idToken));
+  const cachedProfile = getCachedMemberProfile(auth.localId);
+  const profile = user?.profile || cachedProfile;
+  const profileCompleted = user?.role === 'admin'
+    || user?.profileCompleted === true
+    || user?.profileCompletion === true
+    || profile?.profileCompletion === true
+    || getProfileProgress(profile) === 100;
+
+  if (profile) {
+    writeCache(memberProfileCacheKey(auth.localId), withProfileMetadata(profile));
+  }
 
   return {
     uid: auth.localId,
     email: auth.email,
     idToken: auth.idToken,
-    name: user?.name || auth.email,
+    name: profile?.fullName || user?.name || auth.email,
     role: user?.role === 'admin' ? 'admin' : 'member',
-    profileCompleted: user?.role === 'admin' || user?.profileCompleted === true,
-    photoUrl: user?.profile?.photoUrl || user?.photoUrl,
+    profileCompleted,
+    photoUrl: getProfilePhoto(profile) || user?.photoUrl || user?.photoProfile,
   };
 }
 
@@ -276,27 +307,28 @@ export async function completeMemberProfile(profile: MemberProfile, session = ge
   if (!session) {
     throw new Error('Silakan login terlebih dahulu.');
   }
+  const profileWithMetadata = withProfileMetadata(profile);
 
   try {
     await requestJson(dbUrl(`users/${session.uid}`, session.idToken), {
       method: 'PATCH',
       body: JSON.stringify({
-        name: profile.fullName,
-        photoUrl: profile.photoUrl,
-        profile,
+        name: profileWithMetadata.fullName,
+        photoUrl: getProfilePhoto(profileWithMetadata),
+        photoProfile: getProfilePhoto(profileWithMetadata),
+        profile: profileWithMetadata,
         profileCompleted: true,
+        profileCompletion: true,
+        completionProgress: profileWithMetadata.completionProgress,
       }),
     });
   } catch (exception) {
-    const message = exception instanceof Error ? exception.message.toLowerCase() : '';
-    if (!message.includes('permission denied')) {
-      throw exception;
-    }
+    throw exception instanceof Error ? exception : new Error('Gagal menyimpan member card.');
   }
 
-  const updatedSession = markProfileCompleted(profile);
+  const updatedSession = markProfileCompleted(profileWithMetadata);
 
-  return updatedSession || { ...session, name: profile.fullName, profileCompleted: true };
+  return updatedSession || { ...session, name: profileWithMetadata.fullName, photoUrl: getProfilePhoto(profileWithMetadata), profileCompleted: true };
 }
 
 export async function getMemberProfile(memberUid: string, session = getSession()): Promise<MemberProfileRecord | null> {
@@ -308,13 +340,76 @@ export async function getMemberProfile(memberUid: string, session = getSession()
 
   try {
     const record = await requestJson<MemberProfileRecord | null>(dbUrl(`users/${memberUid}`, session.idToken));
+    const profile = record?.profile || cachedProfile || null;
+    const profileWithMetadata = profile ? withProfileMetadata(profile) : undefined;
+
+    if (profileWithMetadata) {
+      writeCache(memberProfileCacheKey(memberUid), profileWithMetadata);
+    }
+
     return {
       ...record,
-      profile: record?.profile || cachedProfile || undefined,
+      profile: profileWithMetadata,
+      profileCompleted: record?.profileCompleted === true || record?.profileCompletion === true || getProfileProgress(profileWithMetadata) === 100,
+      profileCompletion: record?.profileCompletion === true || record?.profileCompleted === true || getProfileProgress(profileWithMetadata) === 100,
+      completionProgress: record?.completionProgress || profileWithMetadata?.completionProgress || 0,
+      photoUrl: record?.photoUrl || getProfilePhoto(profileWithMetadata),
+      photoProfile: record?.photoProfile || getProfilePhoto(profileWithMetadata),
     };
   } catch {
-    return cachedProfile ? { profile: cachedProfile, profileCompleted: true } : null;
+    const profileWithMetadata = cachedProfile ? withProfileMetadata(cachedProfile) : null;
+    return profileWithMetadata
+      ? {
+        profile: profileWithMetadata,
+        profileCompleted: profileWithMetadata.profileCompletion === true,
+        profileCompletion: profileWithMetadata.profileCompletion === true,
+        completionProgress: profileWithMetadata.completionProgress,
+        photoUrl: getProfilePhoto(profileWithMetadata),
+        photoProfile: getProfilePhoto(profileWithMetadata),
+      }
+      : null;
   }
+}
+
+function memberProfileCacheKey(memberUid: string) {
+  return `${MEMBER_PROFILE_CACHE_PREFIX}${memberUid}`;
+}
+
+function getProfilePhoto(profile?: MemberProfile | null) {
+  return profile?.photoUrl || profile?.photoProfile;
+}
+
+function getProfileProgress(profile?: MemberProfile | null) {
+  if (!profile) {
+    return 0;
+  }
+
+  const completedFields = [
+    profile.fullName?.trim(),
+    profile.username?.trim(),
+    profile.email?.trim(),
+    profile.phone?.trim(),
+    profile.location?.trim(),
+    profile.bio?.trim(),
+    getProfilePhoto(profile),
+  ].filter(Boolean).length;
+
+  return Math.round((completedFields / 7) * 100);
+}
+
+function withProfileMetadata(profile: MemberProfile): MemberProfile {
+  const photoProfile = getProfilePhoto(profile);
+  const normalizedProfile = {
+    ...profile,
+    photoUrl: photoProfile,
+    photoProfile,
+  };
+
+  return {
+    ...normalizedProfile,
+    completionProgress: getProfileProgress(normalizedProfile),
+    profileCompletion: getProfileProgress(normalizedProfile) === 100,
+  };
 }
 
 export async function getBooks(session = getSession()): Promise<BookRecord[]> {
@@ -432,7 +527,11 @@ export async function getLoans(session = getSession()): Promise<LoanRecord[]> {
     return [];
   }
 
-  const records = await requestJson<Record<string, Omit<LoanRecord, 'id'> | null> | null>(dbUrl('loans', session.idToken));
+  const records = await requestJson<Record<string, Omit<LoanRecord, 'id'> | null> | null>(
+    session.role === 'admin'
+      ? dbUrl('loans', session.idToken)
+      : dbQueryUrl('loans', session.idToken, { orderBy: 'memberUid', equalTo: session.uid })
+  );
   if (!records) {
     writeCache(LOANS_CACHE_KEY, []);
     return [];
@@ -459,6 +558,7 @@ export async function borrowBook(book: BookRecord, days = 7, session = getSessio
   const dueDate = new Date(borrowDate);
   dueDate.setDate(dueDate.getDate() + days);
   const memberProfile = getCachedMemberProfile(session.uid);
+  const memberPhoto = getProfilePhoto(memberProfile) || session.photoUrl;
   const loan: Omit<LoanRecord, 'id'> = {
     memberUid: session.uid,
     memberName: memberProfile?.fullName || session.name,
@@ -467,7 +567,7 @@ export async function borrowBook(book: BookRecord, days = 7, session = getSessio
     memberPhone: memberProfile?.phone,
     memberLocation: memberProfile?.location,
     memberBio: memberProfile?.bio,
-    memberPhotoUrl: memberProfile?.photoUrl || session.photoUrl,
+    memberPhotoUrl: memberPhoto,
     bookId: book.id,
     bookTitle: book.judul,
     bookJenis: book.jenis,
@@ -481,7 +581,7 @@ export async function borrowBook(book: BookRecord, days = 7, session = getSessio
   };
 
   await saveBook(updatedBook, session, { notifyNewBook: false, notifyRestock: false });
-  const loanId = String(book.id);
+  const loanId = `${Date.now()}-${book.id}-${Math.random().toString(36).slice(2, 8)}`;
   await requestJson(dbUrl(`loans/${loanId}`, session.idToken), {
     method: 'PUT',
     body: JSON.stringify(loan),

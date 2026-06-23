@@ -67,6 +67,7 @@ export default function LoanDataSubView() {
   const [loans, setLoans] = useState<LoanRecord[]>(() => getCachedLoans());
   const [selectedLoan, setSelectedLoan] = useState<LoanRecord | null>(null);
   const [selectedMember, setSelectedMember] = useState<MemberProfileRecord | null>(null);
+  const [memberProfiles, setMemberProfiles] = useState<Record<string, MemberProfileRecord | null>>({});
   const [isConfirmingReturn, setIsConfirmingReturn] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -75,6 +76,37 @@ export default function LoanDataSubView() {
       .then(setLoans)
       .catch((error) => console.error(error));
   }, []);
+
+  useEffect(() => {
+    const memberIds = Array.from(new Set<string>(loans.map((loan) => loan.memberUid))).filter(
+      (memberUid) => !(memberUid in memberProfiles)
+    );
+
+    if (memberIds.length === 0) {
+      return;
+    }
+
+    let isActive = true;
+    Promise.all(
+      memberIds.map(async (memberUid) => {
+        const profile = await getMemberProfile(memberUid).catch(() => null);
+        return [memberUid, profile] as const;
+      })
+    ).then((entries) => {
+      if (!isActive) {
+        return;
+      }
+
+      setMemberProfiles((currentProfiles) => ({
+        ...currentProfiles,
+        ...Object.fromEntries(entries),
+      }));
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [loans, memberProfiles]);
 
   const handleConfirmReturn = async (loan: LoanRecord) => {
     setMessage('');
@@ -104,6 +136,28 @@ export default function LoanDataSubView() {
     setSelectedMember(null);
   };
 
+  const exportLoansCsv = () => {
+    const rows = [
+      ['ID', 'Peminjam', 'Email', 'Buku', 'Tanggal Pinjam', 'Jatuh Tempo', 'Status'],
+      ...loans.map((loan) => [
+        `LN-${loan.id}`,
+        loan.memberName,
+        loan.memberEmail || loan.memberUid,
+        loan.bookTitle,
+        loan.borrowDate,
+        loan.dueDate,
+        loan.returned ? 'Sudah Kembali' : isLoanOverdue(loan) ? 'Terlambat' : 'Aktif',
+      ]),
+    ];
+    const csv = rows.map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'data-peminjaman.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const summary = useMemo(() => {
     const returned = loans.filter((loan) => loan.returned).length;
     const active = loans.length - returned;
@@ -128,11 +182,11 @@ export default function LoanDataSubView() {
           <p className="text-sm text-on-surface-variant mt-1">Kelola dan monitor status peminjaman buku oleh mahasiswa.</p>
         </div>
         <div className="flex gap-3">
-           <button className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white border border-outline-variant px-5 py-3 rounded-xl font-bold text-sm text-on-surface hover:bg-surface-container transition-all">
+           <button onClick={exportLoansCsv} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white border border-outline-variant px-5 py-3 rounded-xl font-bold text-sm text-on-surface hover:bg-surface-container transition-all">
             <Download className="w-5 h-5" />
             Laporan
           </button>
-          <button className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-primary text-white px-8 py-3 rounded-xl font-bold text-sm hover:translate-y-[-2px] hover:shadow-lg transition-all">
+          <button onClick={() => setMessage('Input peminjaman baru dilakukan oleh member melalui menu Katalog Buku.')} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-primary text-white px-8 py-3 rounded-xl font-bold text-sm hover:translate-y-[-2px] hover:shadow-lg transition-all">
             <PlusCircle className="w-5 h-5" />
             Input Baru
           </button>
@@ -175,6 +229,10 @@ export default function LoanDataSubView() {
               {loans.map((loan) => {
                 const statusType = loan.returned ? 'returned' : isLoanOverdue(loan) || Number(loan.fine || 0) > 0 ? 'overdue' : 'active';
                 const status = loan.returned ? 'Sudah Kembali' : statusType === 'overdue' ? 'Terlambat Kembali' : 'Peminjaman Aktif';
+                const memberCard = memberProfiles[loan.memberUid]?.profile;
+                const memberPhoto = memberCard?.photoUrl || memberCard?.photoProfile || loan.memberPhotoUrl;
+                const memberName = memberCard?.fullName || loan.memberName;
+                const memberIdentity = memberCard?.email || memberCard?.username || loan.memberEmail || loan.memberUid;
 
                 return (
                 <tr
@@ -198,12 +256,23 @@ export default function LoanDataSubView() {
                   </td>
                   <td className="py-6 px-6">
                     <div className="flex items-center gap-3">
-                       <div className="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface">
-                         <User className="w-4 h-4" />
+                       <div className="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface overflow-hidden">
+                         {memberPhoto ? (
+                           <img
+                             src={memberPhoto}
+                             alt={memberName}
+                             className="h-full w-full rounded-full object-cover"
+                             onError={(event) => {
+                               event.currentTarget.src = defaultMemberAvatar;
+                             }}
+                           />
+                         ) : (
+                           <User className="w-4 h-4" />
+                         )}
                        </div>
                        <div>
-                         <div className="text-sm font-bold text-on-surface">{loan.memberName}</div>
-                         <div className="text-[11px] font-semibold text-on-surface-variant">{loan.memberEmail || loan.memberUid}</div>
+                         <div className="text-sm font-bold text-on-surface">{memberName}</div>
+                         <div className="text-[11px] font-semibold text-on-surface-variant">{memberIdentity}</div>
                        </div>
                     </div>
                   </td>
@@ -237,7 +306,10 @@ export default function LoanDataSubView() {
                   <td className="py-6 px-6 text-right">
                     <button
                       type="button"
-                      onClick={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openLoanDetail(loan);
+                      }}
                       className="p-2 rounded-full hover:bg-surface-container transition-colors"
                     >
                       <MoreVertical className="w-4 h-4 text-outline" />
@@ -245,6 +317,13 @@ export default function LoanDataSubView() {
                   </td>
                 </tr>
               )})}
+              {loans.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-sm font-semibold text-on-surface-variant">
+                    Belum ada data peminjaman.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

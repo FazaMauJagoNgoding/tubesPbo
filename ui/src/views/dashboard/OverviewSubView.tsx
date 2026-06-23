@@ -9,14 +9,16 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '@/src/lib/utils';
-import { useEffect, useState } from 'react';
-import { BookRecord, getBooks, getCachedBooks, getCachedLoans, getLoans, getSession, LoanRecord } from '@/src/lib/firebaseBackend';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { BookRecord, getBooks, getCachedBooks, getCachedLoans, getLoans, getMemberProfile, getSession, LoanRecord, MemberProfileRecord } from '@/src/lib/firebaseBackend';
 
 export default function OverviewSubView() {
   const session = getSession();
   const role = session?.role || localStorage.getItem('userRole') || 'member';
   const [books, setBooks] = useState<BookRecord[]>(() => getCachedBooks());
   const [loans, setLoans] = useState<LoanRecord[]>(() => getCachedLoans());
+  const [memberProfiles, setMemberProfiles] = useState<Record<string, MemberProfileRecord | null>>({});
 
   useEffect(() => {
     Promise.all([getBooks(), getLoans()])
@@ -27,10 +29,44 @@ export default function OverviewSubView() {
       .catch((error) => console.error(error));
   }, []);
 
-  const visibleLoans = role === 'admin' ? loans : loans.filter((loan) => loan.memberUid === session?.uid);
+  const visibleLoans = useMemo(
+    () => role === 'admin' ? loans : loans.filter((loan) => loan.memberUid === session?.uid),
+    [loans, role, session?.uid]
+  );
   const activeLoans = loans.filter((loan) => !loan.returned);
   const returnedLoans = loans.filter((loan) => loan.returned);
   const totalStock = books.reduce((total, book) => total + book.stock, 0);
+
+  useEffect(() => {
+    const memberIds: string[] = Array.from(new Set<string>(visibleLoans.slice(0, 5).map((loan) => loan.memberUid))).filter(
+      (memberUid) => !memberProfiles[memberUid]
+    );
+
+    if (memberIds.length === 0) {
+      return;
+    }
+
+    let isActive = true;
+    Promise.all(
+      memberIds.map(async (memberUid) => {
+        const profile = await getMemberProfile(memberUid).catch(() => null);
+        return [memberUid, profile] as const;
+      })
+    ).then((entries) => {
+      if (!isActive) {
+        return;
+      }
+
+      setMemberProfiles((currentProfiles) => ({
+        ...currentProfiles,
+        ...Object.fromEntries(entries),
+      }));
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [visibleLoans, memberProfiles]);
 
   const fullStats = [
     { label: 'Total Buku', value: String(books.length), icon: Library, color: 'bg-primary/10 text-primary' },
@@ -47,16 +83,20 @@ export default function OverviewSubView() {
 
   const stats = role === 'admin' ? fullStats : memberStats;
 
-  const filteredActivities = visibleLoans.slice(0, 5).map((loan) => ({
-    member: loan.memberName || '-',
-    nim: loan.memberEmail || '-',
-    book: loan.bookTitle,
-    id: `BK-${loan.bookId}`,
-    date: loan.borrowDate,
-    due: loan.returned ? `Kembali: ${loan.returnDate || '-'}` : `Sampai: ${loan.dueDate}`,
-    status: loan.returned ? 'Returned' : 'Active',
-    statusColor: loan.returned ? 'bg-surface-container-highest text-on-surface-variant' : 'bg-secondary/10 text-secondary',
-  }));
+  const filteredActivities = visibleLoans.slice(0, 5).map((loan) => {
+    const memberCard = memberProfiles[loan.memberUid]?.profile;
+
+    return {
+      member: memberCard?.fullName || loan.memberName || '-',
+      nim: memberCard?.username || loan.memberUsername || '-',
+      book: loan.bookTitle,
+      id: `BK-${loan.bookId}`,
+      date: loan.borrowDate,
+      due: loan.returned ? `Kembali: ${loan.returnDate || '-'}` : `Sampai: ${loan.dueDate}`,
+      status: loan.returned ? 'Returned' : 'Active',
+      statusColor: loan.returned ? 'bg-surface-container-highest text-on-surface-variant' : 'bg-secondary/10 text-secondary',
+    };
+  });
 
   return (
     <div className="space-y-10">
@@ -72,7 +112,7 @@ export default function OverviewSubView() {
           </p>
         </div>
         {role === 'admin' && (
-          <button className="flex items-center gap-2 bg-white border border-outline-variant px-5 py-2.5 rounded-xl text-sm font-semibold text-primary hover:bg-surface-container transition-all shadow-sm">
+          <button onClick={() => window.print()} className="flex items-center gap-2 bg-white border border-outline-variant px-5 py-2.5 rounded-xl text-sm font-semibold text-primary hover:bg-surface-container transition-all shadow-sm">
             <Download className="w-4 h-4" />
             Export Report
           </button>
@@ -110,10 +150,10 @@ export default function OverviewSubView() {
           <h3 className="text-xl font-bold text-on-surface">
             {role === 'admin' ? 'Aktivitas Terbaru' : 'Aktivitas Saya'}
           </h3>
-          <button className="text-sm font-bold text-primary hover:underline flex items-center gap-1 group">
+          <Link to="/dashboard/history" className="text-sm font-bold text-primary hover:underline flex items-center gap-1 group">
             Lihat Semua
             <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </button>
+          </Link>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">

@@ -1,4 +1,4 @@
-import { Link, useLocation, Outlet } from 'react-router-dom';
+import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   BookText, 
@@ -40,7 +40,10 @@ const defaultMemberAvatar = `data:image/svg+xml;utf8,${encodeURIComponent(`
 
 export default function DashboardLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState('');
+  const [headerMessage, setHeaderMessage] = useState('');
   const session = getSession();
   const role = session?.role || (localStorage.getItem('userRole') as 'admin' | 'member') || 'member';
 
@@ -95,6 +98,22 @@ export default function DashboardLayout() {
 
       return !isOpen;
     });
+  };
+
+  const showHeaderMessage = (message: string) => {
+    setHeaderMessage(message);
+    window.setTimeout(() => setHeaderMessage(''), 3000);
+  };
+
+  const handleGlobalSearch = () => {
+    const keyword = searchValue.trim();
+    if (!keyword) {
+      showHeaderMessage('Masukkan kata kunci pencarian terlebih dahulu.');
+      return;
+    }
+
+    navigate(role === 'admin' ? '/dashboard/manage-books' : '/dashboard/catalog');
+    showHeaderMessage(`Pencarian "${keyword}" dibuka di menu ${role === 'admin' ? 'Kelola Buku' : 'Katalog Buku'}.`);
   };
 
   return (
@@ -209,6 +228,13 @@ export default function DashboardLayout() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
               <input 
                 type="text" 
+                value={searchValue}
+                onChange={(event) => setSearchValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    handleGlobalSearch();
+                  }
+                }}
                 placeholder="Search resources..." 
                 className="w-full bg-surface-container-low pl-10 pr-4 py-2 text-sm border-none rounded-full focus:ring-2 focus:ring-primary/10 transition-all outline-none"
               />
@@ -258,7 +284,12 @@ export default function DashboardLayout() {
                 )}
               </AnimatePresence>
             </div>
-            <button className="p-2 rounded-full hover:bg-surface-container transition-colors">
+            {headerMessage && (
+              <div className="hidden xl:block rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                {headerMessage}
+              </div>
+            )}
+            <button onClick={() => showHeaderMessage('Halaman settings belum tersedia.')} className="p-2 rounded-full hover:bg-surface-container transition-colors">
               <Settings className="w-5 h-5 text-on-surface-variant" />
             </button>
             <div className="h-8 w-px bg-outline-variant/30 hidden sm:block mx-2" />

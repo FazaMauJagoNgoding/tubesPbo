@@ -56,7 +56,7 @@ export default function PaymentSubView() {
           </p>
         </div>
         {role === 'admin' && (
-          <button className="flex items-center gap-2 bg-white border border-outline-variant px-5 py-2.5 rounded-xl text-sm font-semibold text-primary hover:bg-surface-container transition-all shadow-sm">
+          <button onClick={() => window.print()} className="flex items-center gap-2 bg-white border border-outline-variant px-5 py-2.5 rounded-xl text-sm font-semibold text-primary hover:bg-surface-container transition-all shadow-sm">
             <Download className="w-4 h-4" />
             Unduh Laporan Keuangan
           </button>
@@ -89,7 +89,7 @@ export default function PaymentSubView() {
                  ) : (
                    <>
                      <ShieldCheck className="w-5 h-5 text-secondary-fixed" />
-                     <span>Akun Anda bersih dari tagihan denda keterlambatan.</span>
+                     <span>{totalFine > 0 ? 'Anda memiliki tagihan denda yang perlu diselesaikan.' : 'Akun Anda bersih dari tagihan denda keterlambatan.'}</span>
                    </>
                  )}
                </div>
@@ -103,11 +103,16 @@ export default function PaymentSubView() {
            <div className="bg-white rounded-2xl shadow-sm border border-outline-variant/30 overflow-hidden">
              <div className="p-6 border-b border-outline-variant/30 flex items-center justify-between">
                <h3 className="font-bold text-on-surface">Riwayat Transaksi</h3>
-               <button className="text-sm font-bold text-primary hover:underline flex items-center gap-2">
+               <button onClick={() => window.print()} className="text-sm font-bold text-primary hover:underline flex items-center gap-2">
                  <Download className="w-4 h-4" /> Cetak Rekapan
                </button>
              </div>
              <div className="divide-y divide-outline-variant/20">
+               {transactions.length === 0 && (
+                 <div className="p-8 text-center text-sm font-semibold text-on-surface-variant">
+                   Belum ada transaksi.
+                 </div>
+               )}
                {transactions.map((trx, i) => (
                  <div key={i} className="p-6 flex items-center justify-between hover:bg-surface-container-low/30 transition-colors">
                    <div className="flex items-center gap-4">

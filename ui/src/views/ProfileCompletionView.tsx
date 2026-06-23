@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { completeMemberProfile, getSession, isProfileCompleted, MemberProfile } from '@/src/lib/firebaseBackend';
 
-type FormErrors = Partial<Record<keyof MemberProfile, string>>;
+type FormErrors = Partial<Record<keyof MemberProfile | 'photoProfile', string>>;
 
 const defaultAvatar = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
@@ -83,14 +83,26 @@ export default function ProfileCompletionView() {
       return;
     }
 
+    if (!file.type.startsWith('image/')) {
+      setErrors((prev) => ({ ...prev, photoProfile: 'File harus berupa gambar JPG atau PNG.' }));
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setErrors((prev) => ({ ...prev, photoProfile: 'Ukuran photo profile maksimal 5MB.' }));
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
         setPhotoPreview(reader.result);
         setHasUploadedPhoto(true);
         setIsGenerated(false);
+        setErrors((prev) => ({ ...prev, photoProfile: undefined }));
       }
     };
+    reader.onerror = () => setErrors((prev) => ({ ...prev, photoProfile: 'Gagal membaca file photo profile.' }));
     reader.readAsDataURL(file);
   };
 
@@ -103,6 +115,7 @@ export default function ProfileCompletionView() {
     if (!formData.phone.trim()) nextErrors.phone = 'Phone Number wajib diisi.';
     if (!formData.location.trim()) nextErrors.location = 'Kelas / Semester wajib diisi.';
     if (!formData.bio.trim()) nextErrors.bio = 'Short Bio wajib diisi.';
+    if (!hasUploadedPhoto) nextErrors.photoProfile = 'Upload Photo wajib diisi.';
 
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -118,7 +131,13 @@ export default function ProfileCompletionView() {
 
     setIsSubmitting(true);
     try {
-      await completeMemberProfile({ ...formData, photoUrl: hasUploadedPhoto ? photoPreview : undefined }, session);
+      await completeMemberProfile({
+        ...formData,
+        photoUrl: photoPreview,
+        photoProfile: photoPreview,
+        completionProgress: profileProgress,
+        profileCompletion: profileProgress === 100,
+      }, session);
       setIsGenerated(true);
       navigate('/dashboard', { replace: true });
     } catch (exception) {
@@ -202,6 +221,7 @@ export default function ProfileCompletionView() {
                       <input type="file" accept="image/png,image/jpeg" onChange={handlePhotoChange} className="sr-only" />
                     </label>
                     <span className="text-center text-[10px] text-slate-500">JPG, PNG up to 5MB</span>
+                    {errors.photoProfile && <p className="text-center text-xs font-medium text-red-600">{errors.photoProfile}</p>}
                   </div>
 
                   <div className="space-y-4">

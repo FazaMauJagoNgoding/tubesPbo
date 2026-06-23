@@ -27,6 +27,20 @@ function RequireCompletedProfile({ children }: { children: ReactNode }) {
   return children;
 }
 
+function RequireRole({ roles, children }: { roles: Array<'admin' | 'member'>; children: ReactNode }) {
+  const session = getSession();
+
+  if (!session) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!roles.includes(session.role)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return children;
+}
+
 function App() {
   return (
     <Router>
@@ -38,9 +52,9 @@ function App() {
         
         <Route path="/dashboard" element={<RequireCompletedProfile><DashboardLayout /></RequireCompletedProfile>}>
           <Route index element={<OverviewSubView />} />
-          <Route path="manage-books" element={<ManageBooksSubView />} />
-          <Route path="loans" element={<LoanDataSubView />} />
-          <Route path="catalog" element={<CatalogSubView />} />
+          <Route path="manage-books" element={<RequireRole roles={['admin']}><ManageBooksSubView /></RequireRole>} />
+          <Route path="loans" element={<RequireRole roles={['admin']}><LoanDataSubView /></RequireRole>} />
+          <Route path="catalog" element={<RequireRole roles={['member']}><CatalogSubView /></RequireRole>} />
           <Route path="history" element={<LoanHistorySubView />} />
           <Route path="payment" element={<PaymentSubView />} />
         </Route>

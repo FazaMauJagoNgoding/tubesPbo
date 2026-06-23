@@ -90,7 +90,13 @@ export default function LoginView() {
                 <input type="checkbox" className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary" />
                 <span className="text-sm text-on-surface-variant group-hover:text-on-surface transition-colors">Remember me</span>
               </label>
-              <a href="#" className="text-sm font-semibold text-primary hover:underline">Forgot Password?</a>
+              <button
+                type="button"
+                onClick={() => setError('Silakan hubungi admin perpustakaan untuk reset password.')}
+                className="text-sm font-semibold text-primary hover:underline"
+              >
+                Forgot Password?
+              </button>
             </div>
 
             <button 

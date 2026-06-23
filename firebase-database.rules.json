@@ -10,8 +10,11 @@
       }
     },
     "loans": {
-      ".read": "auth != null",
-      ".write": "auth != null"
+      ".indexOn": ["memberUid"],
+      ".read": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || (query.orderByChild === 'memberUid' && query.equalTo === auth.uid))",
+      "$loanId": {
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || (!data.exists() && newData.child('memberUid').val() === auth.uid))"
+      }
     },
     "users": {
       "$uid": {
