@@ -16,7 +16,7 @@
     "users": {
       "$uid": {
         ".read": "auth != null && ($uid === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin')",
-        ".write": "auth != null && (($uid === auth.uid && !data.exists() && newData.child('role').val() === 'member') || root.child('users').child(auth.uid).child('role').val() === 'admin')"
+        ".write": "auth != null && (($uid === auth.uid && newData.child('role').val() === 'member') || root.child('users').child(auth.uid).child('role').val() === 'admin')"
       }
     }
   }

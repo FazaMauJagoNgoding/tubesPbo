@@ -11,12 +11,24 @@ import {
   X,
   BookOpen,
   CreditCard,
-  AlertTriangle
+  AlertTriangle,
+  Mail,
+  Phone,
+  MapPin,
+  AlignLeft
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { cn } from '@/src/lib/utils';
 import { useEffect, useMemo, useState } from 'react';
-import { confirmBookReturn, getCachedLoans, getLoans, LoanRecord } from '@/src/lib/firebaseBackend';
+import { confirmBookReturn, getCachedLoans, getLoans, getMemberProfile, LoanRecord, MemberProfileRecord } from '@/src/lib/firebaseBackend';
+
+const defaultMemberAvatar = `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <rect width="200" height="200" fill="#e2e8f0"/>
+  <circle cx="100" cy="78" r="36" fill="#94a3b8"/>
+  <path d="M38 178c8-42 35-66 62-66s54 24 62 66" fill="#94a3b8"/>
+</svg>
+`)}`;
 
 function parseIndonesianDate(dateValue: string) {
   const [day, month, year] = dateValue.split('/').map(Number);
@@ -54,6 +66,7 @@ function formatCurrency(value: number) {
 export default function LoanDataSubView() {
   const [loans, setLoans] = useState<LoanRecord[]>(() => getCachedLoans());
   const [selectedLoan, setSelectedLoan] = useState<LoanRecord | null>(null);
+  const [selectedMember, setSelectedMember] = useState<MemberProfileRecord | null>(null);
   const [isConfirmingReturn, setIsConfirmingReturn] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -78,12 +91,34 @@ export default function LoanDataSubView() {
     }
   };
 
+  const openLoanDetail = (loan: LoanRecord) => {
+    setSelectedLoan(loan);
+    setSelectedMember(null);
+    getMemberProfile(loan.memberUid)
+      .then(setSelectedMember)
+      .catch(() => setSelectedMember(null));
+  };
+
+  const closeLoanDetail = () => {
+    setSelectedLoan(null);
+    setSelectedMember(null);
+  };
+
   const summary = useMemo(() => {
     const returned = loans.filter((loan) => loan.returned).length;
     const active = loans.length - returned;
     const overdue = loans.filter((loan) => Number(loan.fine || 0) > 0).length;
     return { active, overdue, returned };
   }, [loans]);
+  const memberCard = selectedLoan ? {
+    fullName: selectedMember?.profile?.fullName || selectedLoan.memberName,
+    username: selectedMember?.profile?.username || selectedLoan.memberUsername || selectedLoan.memberUid,
+    email: selectedMember?.profile?.email || selectedLoan.memberEmail || '-',
+    phone: selectedMember?.profile?.phone || selectedLoan.memberPhone || '-',
+    location: selectedMember?.profile?.location || selectedLoan.memberLocation || '-',
+    bio: selectedMember?.profile?.bio || selectedLoan.memberBio || '-',
+    photoUrl: selectedMember?.profile?.photoUrl || selectedLoan.memberPhotoUrl || defaultMemberAvatar,
+  } : null;
 
   return (
     <div className="space-y-10">
@@ -146,11 +181,11 @@ export default function LoanDataSubView() {
                   key={loan.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => setSelectedLoan(loan)}
+                  onClick={() => openLoanDetail(loan)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
-                      setSelectedLoan(loan);
+                      openLoanDetail(loan);
                     }
                   }}
                   className="cursor-pointer hover:bg-surface-container-low/30 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary/30 transition-colors"
@@ -222,7 +257,7 @@ export default function LoanDataSubView() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => setSelectedLoan(null)}
+            onClick={closeLoanDetail}
           >
             <motion.div
               role="dialog"
@@ -241,7 +276,7 @@ export default function LoanDataSubView() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setSelectedLoan(null)}
+                  onClick={closeLoanDetail}
                   className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
                   aria-label="Tutup detail peminjaman"
                 >
@@ -250,6 +285,40 @@ export default function LoanDataSubView() {
               </div>
 
               <div className="grid gap-4 p-6 md:grid-cols-2">
+                <div className="relative overflow-hidden rounded-2xl border border-outline-variant/40 bg-gradient-to-br from-[#e0eafc] via-[#f8fafe] to-white p-5 shadow-sm md:col-span-2">
+                  <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '16px 16px' }}></div>
+                  <div className="relative z-10 flex flex-col gap-5 sm:flex-row">
+                    <img
+                      src={memberCard?.photoUrl || defaultMemberAvatar}
+                      alt="Foto member"
+                      className="h-24 w-24 rounded-full border-4 border-white object-cover shadow-sm"
+                    />
+                    <div className="flex-1">
+                      <p className="text-xs font-bold uppercase tracking-widest text-primary">Member Card</p>
+                      <h3 className="mt-1 text-2xl font-bold text-on-surface">{memberCard?.fullName}</h3>
+                      <p className="text-sm font-semibold text-primary">{memberCard?.username}</p>
+                      <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                        <div className="flex items-start gap-2">
+                          <Mail className="mt-0.5 h-4 w-4 text-on-surface-variant" />
+                          <span className="font-semibold text-on-surface">{memberCard?.email}</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <Phone className="mt-0.5 h-4 w-4 text-on-surface-variant" />
+                          <span className="font-semibold text-on-surface">{memberCard?.phone}</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <MapPin className="mt-0.5 h-4 w-4 text-on-surface-variant" />
+                          <span className="font-semibold text-on-surface">{memberCard?.location}</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <AlignLeft className="mt-0.5 h-4 w-4 text-on-surface-variant" />
+                          <span className="font-semibold text-on-surface">{memberCard?.bio}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="rounded-xl border border-outline-variant/40 p-4">
                   <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-on-surface-variant">
                     <BookOpen className="h-4 w-4" />
@@ -265,8 +334,8 @@ export default function LoanDataSubView() {
                     <User className="h-4 w-4" />
                     Nama Peminjam
                   </div>
-                  <p className="text-lg font-bold text-on-surface">{selectedLoan.memberName}</p>
-                  <p className="mt-1 text-sm font-semibold text-on-surface-variant">{selectedLoan.memberEmail || selectedLoan.memberUid}</p>
+                  <p className="text-lg font-bold text-on-surface">{memberCard?.fullName || selectedLoan.memberName}</p>
+                  <p className="mt-1 text-sm font-semibold text-on-surface-variant">{memberCard?.email || selectedLoan.memberEmail || selectedLoan.memberUid}</p>
                 </div>
 
                 <div className="rounded-xl border border-outline-variant/40 p-4">
@@ -345,7 +414,7 @@ export default function LoanDataSubView() {
               <div className="flex flex-col gap-3 border-t border-outline-variant/30 bg-white/70 p-6 sm:flex-row sm:justify-end">
                 <button
                   type="button"
-                  onClick={() => setSelectedLoan(null)}
+                  onClick={closeLoanDetail}
                   className="rounded-lg border border-outline-variant px-5 py-3 text-sm font-bold text-on-surface transition-all hover:bg-surface-container"
                 >
                   Tutup

@@ -27,7 +27,10 @@ export default function RegisterView() {
     try {
       const session = await registerMember(name, email, password);
       saveSession(session);
-      navigate('/dashboard');
+      navigate('/profile-completion', {
+        state: { toast: 'Register berhasil! Lengkapi profil kamu terlebih dahulu.' },
+        replace: true,
+      });
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Registrasi gagal.');
     } finally {

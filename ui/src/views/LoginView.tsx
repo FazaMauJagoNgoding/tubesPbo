@@ -2,7 +2,7 @@ import { motion } from 'motion/react';
 import { Library, Eye, EyeOff, ArrowRight, AlertCircle, Mail, Lock } from 'lucide-react';
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { login, saveSession } from '@/src/lib/firebaseBackend';
+import { isProfileCompleted, login, saveSession } from '@/src/lib/firebaseBackend';
 
 export default function LoginView() {
   const [showPassword, setShowPassword] = useState(false);
@@ -20,7 +20,7 @@ export default function LoginView() {
     try {
       const session = await login(email, password);
       saveSession(session);
-      navigate('/dashboard');
+      navigate(isProfileCompleted(session) ? '/dashboard' : '/profile-completion');
     } catch (exception) {
       setError(exception instanceof Error ? exception.message : 'Email atau password salah');
     } finally {

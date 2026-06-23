@@ -30,6 +30,14 @@ const sidebarItems = [
   { icon: CreditCard, label: 'Pembayaran', path: '/dashboard/payment', roles: ['member'] },
 ];
 
+const defaultMemberAvatar = `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <rect width="200" height="200" fill="#e2e8f0"/>
+  <circle cx="100" cy="78" r="36" fill="#94a3b8"/>
+  <path d="M38 178c8-42 35-66 62-66s54 24 62 66" fill="#94a3b8"/>
+</svg>
+`)}`;
+
 export default function DashboardLayout() {
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -45,7 +53,7 @@ export default function DashboardLayout() {
   } : {
     name: session?.name || 'Member',
     role: 'Member',
-    avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=100'
+    avatar: session?.photoUrl || defaultMemberAvatar
   };
 
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);

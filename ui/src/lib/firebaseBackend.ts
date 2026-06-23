@@ -6,6 +6,8 @@ export type AuthSession = {
   name: string;
   role: UserRole;
   idToken: string;
+  profileCompleted?: boolean;
+  photoUrl?: string;
 };
 
 export type BookRecord = {
@@ -26,6 +28,11 @@ export type LoanRecord = {
   memberUid: string;
   memberName: string;
   memberEmail?: string;
+  memberUsername?: string;
+  memberPhone?: string;
+  memberLocation?: string;
+  memberBio?: string;
+  memberPhotoUrl?: string;
   bookId: number;
   bookTitle: string;
   bookJenis: string;
@@ -37,6 +44,24 @@ export type LoanRecord = {
   paid?: boolean;
   fine?: number;
   returned?: boolean;
+};
+
+export type MemberProfile = {
+  fullName: string;
+  username: string;
+  email: string;
+  phone: string;
+  location: string;
+  bio: string;
+  photoUrl?: string;
+};
+
+export type MemberProfileRecord = {
+  name?: string;
+  email?: string;
+  role?: UserRole;
+  profileCompleted?: boolean;
+  profile?: MemberProfile;
 };
 
 const SESSION_KEY = 'campuslibSession';
@@ -161,6 +186,39 @@ export function clearSession() {
   localStorage.removeItem('userRole');
 }
 
+export function isProfileCompleted(session = getSession()) {
+  if (!session) {
+    return false;
+  }
+
+  return session.role === 'admin' || session.profileCompleted === true;
+}
+
+export function markProfileCompleted(profile?: MemberProfile) {
+  const session = getSession();
+  if (!session) {
+    return null;
+  }
+
+  const updatedSession = {
+    ...session,
+    name: profile?.fullName || session.name,
+    photoUrl: profile?.photoUrl || session.photoUrl,
+    profileCompleted: true,
+  };
+  saveSession(updatedSession);
+
+  if (profile) {
+    writeCache(`campuslibMemberProfile:${session.uid}`, profile);
+  }
+
+  return updatedSession;
+}
+
+export function getCachedMemberProfile(memberUid: string): MemberProfile | null {
+  return readCache<MemberProfile | null>(`campuslibMemberProfile:${memberUid}`, null);
+}
+
 export function getCachedBooks(): BookRecord[] {
   return readCache<BookRecord[]>(BOOKS_CACHE_KEY, []);
 }
@@ -178,7 +236,7 @@ export async function login(email: string, password: string): Promise<AuthSessio
     method: 'POST',
     body: JSON.stringify({ email, password, returnSecureToken: true }),
   });
-  const user = await requestJson<{ name?: string; role?: UserRole } | null>(dbUrl(`users/${auth.localId}`, auth.idToken));
+  const user = await requestJson<{ name?: string; role?: UserRole; profileCompleted?: boolean; profile?: MemberProfile; photoUrl?: string } | null>(dbUrl(`users/${auth.localId}`, auth.idToken));
 
   return {
     uid: auth.localId,
@@ -186,6 +244,8 @@ export async function login(email: string, password: string): Promise<AuthSessio
     idToken: auth.idToken,
     name: user?.name || auth.email,
     role: user?.role === 'admin' ? 'admin' : 'member',
+    profileCompleted: user?.role === 'admin' || user?.profileCompleted === true,
+    photoUrl: user?.profile?.photoUrl || user?.photoUrl,
   };
 }
 
@@ -198,7 +258,7 @@ export async function registerMember(name: string, email: string, password: stri
     method: 'POST',
     body: JSON.stringify({ email, password, returnSecureToken: true }),
   });
-  const user = { name, email: auth.email, role: 'member' as UserRole };
+  const user = { name, email: auth.email, role: 'member' as UserRole, profileCompleted: false };
   await requestJson(dbUrl(`users/${auth.localId}`, auth.idToken), {
     method: 'PUT',
     body: JSON.stringify(user),
@@ -210,6 +270,51 @@ export async function registerMember(name: string, email: string, password: stri
     idToken: auth.idToken,
     ...user,
   };
+}
+
+export async function completeMemberProfile(profile: MemberProfile, session = getSession()): Promise<AuthSession> {
+  if (!session) {
+    throw new Error('Silakan login terlebih dahulu.');
+  }
+
+  try {
+    await requestJson(dbUrl(`users/${session.uid}`, session.idToken), {
+      method: 'PATCH',
+      body: JSON.stringify({
+        name: profile.fullName,
+        photoUrl: profile.photoUrl,
+        profile,
+        profileCompleted: true,
+      }),
+    });
+  } catch (exception) {
+    const message = exception instanceof Error ? exception.message.toLowerCase() : '';
+    if (!message.includes('permission denied')) {
+      throw exception;
+    }
+  }
+
+  const updatedSession = markProfileCompleted(profile);
+
+  return updatedSession || { ...session, name: profile.fullName, profileCompleted: true };
+}
+
+export async function getMemberProfile(memberUid: string, session = getSession()): Promise<MemberProfileRecord | null> {
+  if (!session) {
+    throw new Error('Silakan login terlebih dahulu.');
+  }
+
+  const cachedProfile = getCachedMemberProfile(memberUid);
+
+  try {
+    const record = await requestJson<MemberProfileRecord | null>(dbUrl(`users/${memberUid}`, session.idToken));
+    return {
+      ...record,
+      profile: record?.profile || cachedProfile || undefined,
+    };
+  } catch {
+    return cachedProfile ? { profile: cachedProfile, profileCompleted: true } : null;
+  }
 }
 
 export async function getBooks(session = getSession()): Promise<BookRecord[]> {
@@ -353,10 +458,16 @@ export async function borrowBook(book: BookRecord, days = 7, session = getSessio
   const borrowDate = new Date();
   const dueDate = new Date(borrowDate);
   dueDate.setDate(dueDate.getDate() + days);
+  const memberProfile = getCachedMemberProfile(session.uid);
   const loan: Omit<LoanRecord, 'id'> = {
     memberUid: session.uid,
-    memberName: session.name,
-    memberEmail: session.email,
+    memberName: memberProfile?.fullName || session.name,
+    memberEmail: memberProfile?.email || session.email,
+    memberUsername: memberProfile?.username,
+    memberPhone: memberProfile?.phone,
+    memberLocation: memberProfile?.location,
+    memberBio: memberProfile?.bio,
+    memberPhotoUrl: memberProfile?.photoUrl || session.photoUrl,
     bookId: book.id,
     bookTitle: book.judul,
     bookJenis: book.jenis,
