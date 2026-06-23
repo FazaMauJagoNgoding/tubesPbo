@@ -86,18 +86,26 @@ export default function DashboardLayout() {
       return;
     }
 
-    setNotifications((current) => current.map((item) => ({ ...item, read: true })));
+    setNotifications((current) => current.map((item) => ({ ...item, read: true, isRead: true })));
     Promise.all(unreadNotifications.map((n) => markNotificationRead(n.id))).catch(() => {});
   };
 
   const handleNotificationToggle = () => {
-    setIsNotifOpen((isOpen) => {
-      if (!isOpen) {
-        markAllNotificationsRead();
-      }
+    setIsNotifOpen((isOpen) => !isOpen);
+  };
 
-      return !isOpen;
-    });
+  const handleNotificationClick = async (notification: NotificationRecord) => {
+    if (!notification.read) {
+      setNotifications((current) => current.map((item) => (
+        item.id === notification.id ? { ...item, read: true, isRead: true } : item
+      )));
+      await markNotificationRead(notification.id).catch(() => {});
+    }
+
+    if (notification.link) {
+      navigate(notification.link);
+      setIsNotifOpen(false);
+    }
   };
 
   const showHeaderMessage = (message: string) => {
@@ -266,7 +274,11 @@ export default function DashboardLayout() {
                     <div className="max-h-64 overflow-auto">
                       {notifications.length === 0 && <div className="p-4 text-sm text-on-surface-variant">Tidak ada notifikasi.</div>}
                       {notifications.map((n) => (
-                        <div key={n.id} className={cn('p-3 border-b border-outline-variant/20 flex items-start gap-3', !n.read ? 'bg-surface-container-low' : '')}>
+                        <button
+                          key={n.id}
+                          onClick={() => handleNotificationClick(n)}
+                          className={cn('w-full p-3 border-b border-outline-variant/20 flex items-start gap-3 text-left hover:bg-surface-container-low transition-colors', !n.read ? 'bg-surface-container-low' : '')}
+                        >
                           <div className="flex-1">
                             <div className="text-sm font-bold">{n.title}</div>
                             <div className="text-xs text-on-surface-variant mt-1">{n.body}</div>
@@ -274,10 +286,10 @@ export default function DashboardLayout() {
                           </div>
                           <div className="flex flex-col gap-2">
                             {!n.read && (
-                              <button onClick={() => { markNotificationRead(n.id).then(()=>loadNotifications()); }} className="text-xs px-2 py-1 rounded bg-primary/10 text-primary">Tandai</button>
+                              <span className="text-xs px-2 py-1 rounded bg-primary/10 text-primary">Unread</span>
                             )}
                           </div>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </motion.div>

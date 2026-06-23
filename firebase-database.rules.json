@@ -16,7 +16,22 @@
         ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || (!data.exists() && newData.child('memberUid').val() === auth.uid))"
       }
     },
+    "notifications_admin": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
+      "$notificationId": {
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || (newData.child('type').val() === 'new_loan' && newData.child('userId').val() === auth.uid))"
+      }
+    },
+    "notifications_users": {
+      "$uid": {
+        ".read": "auth != null && ($uid === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        "$notificationId": {
+          ".write": "auth != null && ($uid === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin')"
+        }
+      }
+    },
     "users": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'",
       "$uid": {
         ".read": "auth != null && ($uid === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'admin')",
         ".write": "auth != null && (($uid === auth.uid && newData.child('role').val() === 'member') || root.child('users').child(auth.uid).child('role').val() === 'admin')"

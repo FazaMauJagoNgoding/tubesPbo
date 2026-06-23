@@ -16,6 +16,7 @@ export type BookRecord = {
   jenis: string;
   stock: number;
   coverUrl?: string;
+  penulis?: string;
 };
 
 type SaveBookOptions = {
@@ -425,21 +426,151 @@ export async function getBooks(session = getSession()): Promise<BookRecord[]> {
 
 export type NotificationRecord = {
   id: string;
+  type?: 'new_loan' | 'new_book' | string;
   title: string;
   body: string;
+  message?: string;
   createdAt: string; // ISO
+  isRead?: boolean;
+  link?: string;
+  loanId?: string;
+  userId?: string;
+  bookId?: number;
+  bookTitle?: string;
+  bookAuthor?: string;
+  bookCategory?: string;
+  bookStock?: number;
   toRole?: UserRole | 'all';
   toUserId?: string;
   read?: boolean;
 };
+
+type UserRecord = {
+  name?: string;
+  email?: string;
+  role?: UserRole;
+  profile?: MemberProfile;
+};
+
+function toNotificationRecord(id: string, value: Omit<NotificationRecord, 'id'>): NotificationRecord {
+  return {
+    ...value,
+    id,
+    body: value.body || value.message || '',
+    message: value.message || value.body || '',
+    read: value.read ?? value.isRead ?? false,
+    isRead: value.isRead ?? value.read ?? false,
+  };
+}
+
+async function getUsers(session = getSession()): Promise<Array<{ uid: string } & UserRecord>> {
+  if (!session) {
+    return [];
+  }
+
+  const records = await requestJson<Record<string, UserRecord | null> | null>(dbUrl('users', session.idToken));
+  if (!records) {
+    return [];
+  }
+
+  return Object.entries(records)
+    .filter((entry): entry is [string, UserRecord] => entry[1] !== null)
+    .map(([uid, value]) => ({ uid, ...value }));
+}
+
+async function notifyNewBookUsers(book: BookRecord, session = getSession()) {
+  if (!session || session.role !== 'admin') {
+    return;
+  }
+
+  const users = (await getUsers(session)).filter((user) => user.role === 'member');
+  const notificationTime = new Date().toISOString();
+
+  await Promise.all(users.map((user) => {
+    const notificationId = `${Date.now()}-${user.uid}-${Math.random().toString(36).slice(2, 8)}`;
+    const title = 'Buku Baru Tersedia';
+    const message = `Admin baru saja menambahkan buku ${book.judul}. Cek sekarang di katalog CampusLib.`;
+
+    return requestJson(dbUrl(`notifications_users/${user.uid}/${notificationId}`, session.idToken), {
+      method: 'PUT',
+      body: JSON.stringify({
+        type: 'new_book',
+        title,
+        message,
+        body: message,
+        bookId: book.id,
+        bookTitle: book.judul,
+        bookAuthor: book.penulis || '-',
+        bookCategory: book.jenis,
+        bookStock: book.stock,
+        isRead: false,
+        read: false,
+        link: '/dashboard/catalog',
+        createdAt: notificationTime,
+      }),
+    });
+  }));
+
+  sendNewBookEmails(book, users).catch((error) => {
+    console.warn('CampusLib email notification request failed.', error);
+  });
+}
+
+async function sendNewBookEmails(book: BookRecord, users: Array<{ uid: string } & UserRecord>) {
+  if (users.length === 0) {
+    return;
+  }
+
+  const response = await fetch('/api/send-new-book-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      book: {
+        title: book.judul,
+        author: book.penulis || '-',
+        category: book.jenis,
+        stock: book.stock,
+      },
+      users: users
+        .map((user) => ({
+          name: user.profile?.fullName || user.name || user.email || 'Member',
+          email: user.profile?.email || user.email,
+        }))
+        .filter((user) => Boolean(user.email)),
+    }),
+  });
+
+  const contentType = response.headers.get('content-type') || '';
+  const result = contentType.includes('application/json') ? await response.json().catch(() => null) : null;
+  if (!contentType.includes('application/json')) {
+    console.warn('CampusLib email API did not return JSON. Make sure the serverless API is running.', {
+      status: response.status,
+      contentType,
+    });
+    return;
+  }
+  if (!response.ok || result?.skipped || result?.failed) {
+    console.warn('CampusLib email notification was not fully sent.', result);
+  }
+}
 
 export async function pushNotification(notification: Omit<NotificationRecord, 'id' | 'createdAt'>, session = getSession()) {
   if (!session) {
     throw new Error('Silakan login terlebih dahulu.');
   }
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const full: NotificationRecord = { id, createdAt: new Date().toISOString(), read: false, ...notification } as NotificationRecord;
-  await requestJson(dbUrl(`notifications/${id}`, session.idToken), {
+  const full: NotificationRecord = {
+    id,
+    createdAt: new Date().toISOString(),
+    read: false,
+    isRead: false,
+    ...notification,
+  } as NotificationRecord;
+  const path = notification.toRole === 'admin'
+    ? `notifications_admin/${id}`
+    : `notifications_users/${notification.toUserId || session.uid}/${id}`;
+
+  await requestJson(dbUrl(path, session.idToken), {
     method: 'PUT',
     body: JSON.stringify(full),
   });
@@ -449,28 +580,26 @@ export async function getNotifications(session = getSession()): Promise<Notifica
   if (!session) {
     return [];
   }
-  const records = await requestJson<Record<string, Omit<NotificationRecord, 'id'> | null> | null>(dbUrl('notifications', session.idToken));
+  const path = session.role === 'admin' ? 'notifications_admin' : `notifications_users/${session.uid}`;
+  const records = await requestJson<Record<string, Omit<NotificationRecord, 'id'> | null> | null>(dbUrl(path, session.idToken));
   if (!records) return [];
   const notifications = Object.entries(records)
     .filter((entry): entry is [string, Omit<NotificationRecord, 'id'>] => entry[1] !== null)
-    .map(([id, value]) => ({ id, ...value } as NotificationRecord))
-    .filter((n) => {
-      if (n.toRole === 'all') return true;
-      if (n.toRole && n.toRole === session.role) return true;
-      if (n.toUserId && n.toUserId === session.uid) return true;
-      return false;
-    })
+    .map(([id, value]) => toNotificationRecord(id, value))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return notifications;
 }
 
 export async function markNotificationRead(notificationId: string, session = getSession()): Promise<void> {
   if (!session) throw new Error('Silakan login terlebih dahulu.');
-  const existing = await requestJson<NotificationRecord | null>(dbUrl(`notifications/${notificationId}`, session.idToken));
+  const path = session.role === 'admin'
+    ? `notifications_admin/${notificationId}`
+    : `notifications_users/${session.uid}/${notificationId}`;
+  const existing = await requestJson<NotificationRecord | null>(dbUrl(path, session.idToken));
   if (!existing) return;
-  await requestJson(dbUrl(`notifications/${notificationId}`, session.idToken), {
-    method: 'PUT',
-    body: JSON.stringify({ ...existing, read: true }),
+  await requestJson(dbUrl(path, session.idToken), {
+    method: 'PATCH',
+    body: JSON.stringify({ read: true, isRead: true }),
   });
 }
 
@@ -494,23 +623,13 @@ export async function saveBook(book: BookRecord, session = getSession(), options
 
   if (!existingBook && notifyNewBook) {
     try {
-      await pushNotification({ title: `Buku baru: ${book.judul}`, body: `Buku "${book.judul}" telah ditambahkan ke katalog.`, toRole: 'member' }, session);
+      await notifyNewBookUsers(book, session);
     } catch {
       // ignore notification failures
     }
   }
 
-  if (existingBook && notifyRestock && session.role === 'admin' && book.stock > existingBook.stock) {
-    try {
-      await pushNotification({
-        title: `Restock: ${book.judul}`,
-        body: `Buku "${book.judul}" telah di-restock. Stok tersedia sekarang ${book.stock}.`,
-        toRole: 'member',
-      }, session);
-    } catch {
-      // ignore notification failures
-    }
-  }
+  void notifyRestock;
 }
 
 export async function deleteBook(bookId: number, session = getSession()) {
@@ -586,6 +705,17 @@ export async function borrowBook(book: BookRecord, days = 7, session = getSessio
     method: 'PUT',
     body: JSON.stringify(loan),
   });
+  await pushNotification({
+    type: 'new_loan',
+    title: 'Peminjaman Baru',
+    body: `${loan.memberName} meminjam buku ${loan.bookTitle}`,
+    message: `${loan.memberName} meminjam buku ${loan.bookTitle}`,
+    loanId,
+    userId: session.uid,
+    bookId: book.id,
+    link: '/dashboard/loans',
+    toRole: 'admin',
+  }, session).catch(() => {});
   const loanRecord = { id: loanId, ...loan };
   writeCache(
     LOANS_CACHE_KEY,
