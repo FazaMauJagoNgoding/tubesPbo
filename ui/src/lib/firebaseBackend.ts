@@ -17,6 +17,9 @@ export type BookRecord = {
   stock: number;
   coverUrl?: string;
   penulis?: string;
+  ratingAverage?: number;
+  ratingCount?: number;
+  ratingTotal?: number;
 };
 
 type SaveBookOptions = {
@@ -45,6 +48,8 @@ export type LoanRecord = {
   paid?: boolean;
   fine?: number;
   returned?: boolean;
+  rating?: number;
+  ratedAt?: string;
 };
 
 export type MemberProfile = {
@@ -754,4 +759,74 @@ export async function confirmBookReturn(loan: LoanRecord, session = getSession()
   );
 
   return returnedLoan;
+}
+
+export async function submitBookRating(loan: LoanRecord, rating: number, session = getSession()): Promise<{ loan: LoanRecord; book: BookRecord }> {
+  if (!session) {
+    throw new Error('Silakan login terlebih dahulu.');
+  }
+  if (session.role !== 'member' || loan.memberUid !== session.uid) {
+    throw new Error('Rating hanya bisa diberikan oleh member yang meminjam buku ini.');
+  }
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    throw new Error('Rating harus bernilai 1 sampai 5.');
+  }
+
+  const book = await requestJson<BookRecord | null>(dbUrl(`books/${loan.bookId}`, session.idToken));
+  if (!book) {
+    throw new Error('Data buku tidak ditemukan.');
+  }
+
+  const previousRating = Number(loan.rating || 0);
+  const currentTotal = Number(book.ratingTotal || 0);
+  const currentCount = Number(book.ratingCount || 0);
+  const nextTotal = previousRating > 0 ? currentTotal - previousRating + rating : currentTotal + rating;
+  const nextCount = previousRating > 0 ? currentCount : currentCount + 1;
+  const nextAverage = nextCount > 0 ? Number((nextTotal / nextCount).toFixed(2)) : 0;
+  const ratedAt = new Date().toISOString();
+  const ratedLoan: LoanRecord = {
+    ...loan,
+    rating,
+    ratedAt,
+  };
+  const ratedBook: BookRecord = {
+    ...book,
+    ratingAverage: nextAverage,
+    ratingCount: nextCount,
+    ratingTotal: nextTotal,
+  };
+
+  await requestJson(dbUrl(`loans/${loan.id}/rating`, session.idToken), {
+    method: 'PUT',
+    body: JSON.stringify(rating),
+  });
+  await requestJson(dbUrl(`loans/${loan.id}/ratedAt`, session.idToken), {
+    method: 'PUT',
+    body: JSON.stringify(ratedAt),
+  });
+  await Promise.all([
+    requestJson(dbUrl(`books/${book.id}/ratingAverage`, session.idToken), {
+      method: 'PUT',
+      body: JSON.stringify(ratedBook.ratingAverage),
+    }),
+    requestJson(dbUrl(`books/${book.id}/ratingCount`, session.idToken), {
+      method: 'PUT',
+      body: JSON.stringify(ratedBook.ratingCount),
+    }),
+    requestJson(dbUrl(`books/${book.id}/ratingTotal`, session.idToken), {
+      method: 'PUT',
+      body: JSON.stringify(ratedBook.ratingTotal),
+    }),
+  ]);
+
+  writeCache(
+    LOANS_CACHE_KEY,
+    getCachedLoans().map((cachedLoan) => cachedLoan.id === loan.id ? ratedLoan : cachedLoan)
+  );
+  writeCache(
+    BOOKS_CACHE_KEY,
+    getCachedBooks().map((cachedBook) => cachedBook.id === book.id ? { ...cachedBook, ...ratedBook } : cachedBook)
+  );
+
+  return { loan: ratedLoan, book: ratedBook };
 }

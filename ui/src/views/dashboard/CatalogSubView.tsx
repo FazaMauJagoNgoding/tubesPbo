@@ -22,6 +22,15 @@ import { BookRecord, LoanRecord, borrowBook, getBooks, getCachedBooks } from '@/
 const fallbackCoverUrl = 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&q=80&w=400';
 const BOOKMARKS_KEY = 'campuslibBookmarks';
 
+function formatBookRating(book: BookRecord) {
+  const count = Number(book.ratingCount || 0);
+  if (count === 0) {
+    return 'Belum ada rating';
+  }
+
+  return `${Number(book.ratingAverage || 0).toFixed(1)} (${count})`;
+}
+
 function readBookmarksFromStorage(): number[] {
   try {
     const raw = localStorage.getItem(BOOKMARKS_KEY);
@@ -409,7 +418,7 @@ export default function CatalogSubView() {
                 <div className="flex items-center gap-4 mb-4">
                   <div className="flex items-center gap-1 text-xs font-bold text-on-surface font-mono">
                     <Star className="w-3.5 h-3.5 text-tertiary fill-tertiary" />
-                    {book.stock}
+                    {formatBookRating(book)}
                   </div>
                   <div className="flex items-center gap-1 text-xs font-semibold text-on-surface-variant">
                     <MapPin className="w-3.5 h-3.5" />
@@ -544,6 +553,13 @@ export default function CatalogSubView() {
                       <p className="font-bold text-on-surface">{selectedBook.id}</p>
                     </div>
                     <div className="rounded-xl border border-outline-variant/40 p-4">
+                      <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                        <Star className="h-4 w-4 text-tertiary fill-tertiary" />
+                        Rating
+                      </div>
+                      <p className="font-bold text-on-surface">{formatBookRating(selectedBook)}</p>
+                    </div>
+                    <div className="rounded-xl border border-outline-variant/40 p-4 sm:col-span-2">
                       <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-on-surface-variant">
                         <BookOpen className="h-4 w-4" />
                         Stok

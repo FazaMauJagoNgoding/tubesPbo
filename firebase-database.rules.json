@@ -5,15 +5,30 @@
     "books": {
       ".read": "auth != null",
       "$bookId": {
-        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || (data.exists() && newData.child('id').val() === data.child('id').val() && newData.child('judul').val() === data.child('judul').val() && newData.child('jenis').val() === data.child('jenis').val() && (newData.child('stock').val() === data.child('stock').val() - 1 || newData.child('stock').val() === data.child('stock').val() + 1)))",
-        ".validate": "newData.hasChildren(['id', 'judul', 'jenis', 'stock']) && newData.child('id').isNumber() && newData.child('judul').isString() && newData.child('jenis').isString() && newData.child('stock').isNumber() && newData.child('stock').val() >= 0"
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || (data.exists() && newData.child('id').val() === data.child('id').val() && newData.child('judul').val() === data.child('judul').val() && newData.child('jenis').val() === data.child('jenis').val() && ((newData.child('stock').val() === data.child('stock').val() - 1 || newData.child('stock').val() === data.child('stock').val() + 1) || (newData.child('stock').val() === data.child('stock').val() && newData.child('ratingAverage').isNumber() && newData.child('ratingCount').isNumber() && newData.child('ratingTotal').isNumber()))))",
+        ".validate": "newData.hasChildren(['id', 'judul', 'jenis', 'stock']) && newData.child('id').isNumber() && newData.child('judul').isString() && newData.child('jenis').isString() && newData.child('stock').isNumber() && newData.child('stock').val() >= 0",
+        "ratingAverage": {
+          ".write": "auth != null && data.parent().exists() && newData.isNumber() && newData.val() >= 0 && newData.val() <= 5"
+        },
+        "ratingCount": {
+          ".write": "auth != null && data.parent().exists() && newData.isNumber() && newData.val() >= 0"
+        },
+        "ratingTotal": {
+          ".write": "auth != null && data.parent().exists() && newData.isNumber() && newData.val() >= 0"
+        }
       }
     },
     "loans": {
       ".indexOn": ["memberUid"],
       ".read": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || (query.orderByChild === 'memberUid' && query.equalTo === auth.uid))",
       "$loanId": {
-        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || (!data.exists() && newData.child('memberUid').val() === auth.uid))"
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'admin' || (!data.exists() && newData.child('memberUid').val() === auth.uid) || (data.exists() && data.child('memberUid').val() === auth.uid && newData.child('memberUid').val() === data.child('memberUid').val() && newData.child('bookId').val() === data.child('bookId').val() && newData.child('bookTitle').val() === data.child('bookTitle').val() && newData.child('borrowDate').val() === data.child('borrowDate').val() && newData.child('dueDate').val() === data.child('dueDate').val() && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 5))",
+        "rating": {
+          ".write": "auth != null && data.parent().child('memberUid').val() === auth.uid && newData.isNumber() && newData.val() >= 1 && newData.val() <= 5"
+        },
+        "ratedAt": {
+          ".write": "auth != null && data.parent().child('memberUid').val() === auth.uid && newData.isString()"
+        }
       }
     },
     "notifications_admin": {

@@ -7,12 +7,13 @@ import {
   BookOpen,
   User,
   Clock,
-  X
+  X,
+  Star
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '@/src/lib/utils';
 import { useEffect, useState, useMemo } from 'react';
-import { getCachedLoans, getLoans, getSession, LoanRecord } from '@/src/lib/firebaseBackend';
+import { getCachedLoans, getLoans, getSession, LoanRecord, submitBookRating } from '@/src/lib/firebaseBackend';
 
 function getVisibleLoans(loans: LoanRecord[], session: ReturnType<typeof getSession>) {
   return session?.role === 'admin'
@@ -34,6 +35,8 @@ export default function LoanHistorySubView() {
   const [historyData, setHistoryData] = useState<LoanRecord[]>(() => getVisibleLoans(getCachedLoans(), session));
   const [searchQuery, setSearchQuery] = useState('');
   const [startDate, setStartDate] = useState('');
+  const [ratingMessage, setRatingMessage] = useState('');
+  const [savingRatingLoanId, setSavingRatingLoanId] = useState<string | null>(null);
 
   useEffect(() => {
     getLoans()
@@ -93,6 +96,22 @@ export default function LoanHistorySubView() {
     URL.revokeObjectURL(url);
   };
 
+  const handleRateLoan = async (loan: LoanRecord, rating: number) => {
+    setRatingMessage('');
+    setSavingRatingLoanId(loan.id);
+    try {
+      const result = await submitBookRating(loan, rating);
+      setHistoryData((currentLoans) => currentLoans.map((currentLoan) => (
+        currentLoan.id === result.loan.id ? result.loan : currentLoan
+      )));
+      setRatingMessage(`Rating ${rating} bintang untuk "${loan.bookTitle}" berhasil disimpan.`);
+    } catch (error) {
+      setRatingMessage(error instanceof Error ? error.message : 'Gagal menyimpan rating.');
+    } finally {
+      setSavingRatingLoanId(null);
+    }
+  };
+
   return (
     <div className="space-y-10">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
@@ -105,6 +124,7 @@ export default function LoanHistorySubView() {
           Ekspor Semua
         </button>
       </div>
+      {ratingMessage && <p className="text-sm font-semibold text-primary">{ratingMessage}</p>}
 
       <div className="bg-white rounded-2xl shadow-sm border border-outline-variant/30 overflow-hidden">
         <div className="p-6 border-b border-outline-variant/30 bg-surface-container-low/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -148,6 +168,7 @@ export default function LoanHistorySubView() {
                 <th className="py-5 px-6 text-xs font-bold text-on-surface-variant uppercase tracking-widest">Informasi Buku</th>
                 <th className="py-5 px-6 text-xs font-bold text-on-surface-variant uppercase tracking-widest">Timeline</th>
                 <th className="py-5 px-6 text-xs font-bold text-on-surface-variant uppercase tracking-widest text-center">Status</th>
+                <th className="py-5 px-6 text-xs font-bold text-on-surface-variant uppercase tracking-widest text-center">Rating</th>
                 <th className="py-5 px-6"></th>
               </tr>
             </thead>
@@ -199,6 +220,35 @@ export default function LoanHistorySubView() {
                       </span>
                     </div>
                   </td>
+                  <td className="py-6 px-6">
+                    <div className="flex justify-center">
+                      {session?.role === 'member' ? (
+                        <div className="flex items-center gap-1" aria-label={`Rating untuk ${item.bookTitle}`}>
+                          {[1, 2, 3, 4, 5].map((rating) => {
+                            const isActive = Number(item.rating || 0) >= rating;
+
+                            return (
+                              <button
+                                key={rating}
+                                type="button"
+                                disabled={savingRatingLoanId === item.id}
+                                onClick={() => handleRateLoan(item, rating)}
+                                className="rounded p-0.5 text-tertiary transition-transform hover:scale-110 disabled:cursor-not-allowed disabled:opacity-50"
+                                aria-label={`Beri rating ${rating} bintang`}
+                                title={`Beri rating ${rating} bintang`}
+                              >
+                                <Star className={cn("h-4 w-4", isActive ? "fill-tertiary" : "fill-transparent")} />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-xs font-bold text-on-surface-variant">
+                          {item.rating ? `${item.rating}/5` : '-'}
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="py-6 px-6 text-right">
                     <button onClick={() => window.print()} className="text-xs font-bold text-primary hover:underline">Detail Nota</button>
                   </td>
@@ -206,7 +256,7 @@ export default function LoanHistorySubView() {
               )})}
               {filteredData.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-sm font-semibold text-on-surface-variant">
+                  <td colSpan={6} className="py-12 text-center text-sm font-semibold text-on-surface-variant">
                     Tidak ada riwayat peminjaman yang cocok.
                   </td>
                 </tr>
